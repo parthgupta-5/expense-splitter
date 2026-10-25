@@ -23,6 +23,7 @@ import { computeBalances, computeSettlements, computeSplit, validateSplit } from
 import ErrorBoundary from './ErrorBoundary';
 import { toCsv } from './lib/csv';
 import { mergeGroups } from './lib/sync';
+import { parseBackupText, sanitizeGroup, sanitizeGroups } from './lib/backup';
 import { describeRejected, parseNames, removalStatus } from './lib/people';
 import { DESCRIPTION_MAX, GROUP_NAME_MAX, NOTE_MAX } from './lib/limits';
 
@@ -44,10 +45,14 @@ const readSaved = () => {
   try {
     const current = localStorage.getItem(STATE_KEY);
     const legacy = localStorage.getItem('expenseSplitterStateV1');
-    return JSON.parse(current || legacy || '{}');
+    const raw = JSON.parse(current || legacy || '{}');
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+    // Damaged or hand-edited storage must never crash the app on every reload.
+    return { ...raw, groups: Array.isArray(raw.groups) ? sanitizeGroups(raw.groups).groups : undefined };
   } catch { return {}; }
 };
-const legacyGroup = (saved) => ({
+const legacyGroup = (saved) => sanitizeGroup(rawLegacyGroup(saved)).group;
+const rawLegacyGroup = (saved) => ({
   id: makeId(), name: saved.groupName || 'My first group',
   people: Array.isArray(saved.names) ? saved.names : [],
   expenses: Array.isArray(saved.expenses) ? saved.expenses : [],
@@ -299,13 +304,11 @@ function AppView() {
   };
   const importBackup = async (file) => {
     try {
-      const backup = JSON.parse(await file.text());
-      if (!Array.isArray(backup.groups) || backup.groups.some((group) => !group.id || !group.name)) {
-        throw new Error('This file does not contain a valid Expense Splitter backup.');
-      }
+      const backup = parseBackupText(await file.text(), file.size);
       Modal.confirm({
         title: 'Import this backup?',
-        content: 'The backup groups will be added to this device. Groups with matching IDs will use the imported copy.',
+        content: `${backup.groups.length} group(s) will be added to this device. Groups with matching IDs will use the imported copy.`
+          + (backup.skipped ? ` ${backup.skipped} damaged item(s) in the file will be skipped.` : ''),
         okText: 'Import backup',
         onOk: () => {
           setGroups((current) => {
@@ -313,10 +316,10 @@ function AppView() {
             current.forEach((group) => { if (!imported.has(group.id)) imported.set(group.id, group); });
             return [...imported.values()];
           });
-          if (Array.isArray(backup.savedPeople)) setSavedPeople(backup.savedPeople);
-          if (backup.preferences && typeof backup.preferences === 'object') setPreferences((current) => ({ ...current, ...backup.preferences }));
-          if (backup.groups[0]?.id) setActiveGroupId(backup.groups[0].id);
-          messageApi.success('Backup imported');
+          if (backup.savedPeople.length) setSavedPeople((current) => [...new Set([...current, ...backup.savedPeople])]);
+          if (Object.keys(backup.preferences).length) setPreferences((current) => ({ ...current, ...backup.preferences }));
+          setActiveGroupId(backup.groups[0].id);
+          messageApi.success(backup.skipped ? `Backup imported. ${backup.skipped} damaged item(s) were skipped.` : 'Backup imported');
         },
       });
     } catch (error) { messageApi.error(error.message || 'Could not read this backup file.'); }

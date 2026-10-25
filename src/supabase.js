@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { GROUP_NAME_MAX } from './lib/limits';
+import { sanitizeGroup } from './lib/backup';
 
 const url = import.meta.env.VITE_SUPABASE_URL;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -18,19 +19,20 @@ export async function fetchCloudGroups(userId) {
     .select('id, name, data, created_at, updated_at')
     .order('updated_at', { ascending: false });
   if (error) throw error;
-  return (data ?? []).map((row) => ({
-    id: row.id,
-    name: row.name,
-    people: row.data?.people ?? [],
-    expenses: row.data?.expenses ?? [],
-    payments: row.data?.payments ?? [],
-    savedSplits: row.data?.savedSplits ?? [],
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-    ownerId: userId,
-  }));
+  return (data ?? []).flatMap((row) => {
+    const { group } = sanitizeGroup({
+      id: row.id,
+      name: row.name,
+      people: row.data?.people ?? [],
+      expenses: row.data?.expenses ?? [],
+      payments: row.data?.payments ?? [],
+      savedSplits: row.data?.savedSplits ?? [],
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    });
+    return group ? [{ ...group, ownerId: userId }] : [];
+  });
 }
-
 
 const toRow = (group, userId) => ({
   id: group.id,
