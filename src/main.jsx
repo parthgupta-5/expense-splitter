@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   App as AntApp, Avatar, Badge, Button, Card, Col, ConfigProvider, Divider,
@@ -22,6 +22,7 @@ import {
 import { computeBalances, computeSettlements, computeSplit, validateSplit } from './lib/splits';
 import ErrorBoundary from './ErrorBoundary';
 import { toCsv } from './lib/csv';
+import { mergeGroups } from './lib/sync';
 import { describeRejected, parseNames, removalStatus } from './lib/people';
 import { DESCRIPTION_MAX, GROUP_NAME_MAX, NOTE_MAX } from './lib/limits';
 
@@ -105,6 +106,8 @@ function AppView() {
   const formatInCurrency = (value, code = currencyCode) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: code, maximumFractionDigits: 2 }).format(Number(value) || 0);
   const currencySymbol = money.formatToParts(0).find((part) => part.type === 'currency')?.value || '₹';
 
+  const groupsRef = useRef(groups);
+  groupsRef.current = groups;
   const participants = (participantSel ?? people).filter((name) => people.includes(name));
 
   const patchGroup = (updater) => {
@@ -151,12 +154,14 @@ function AppView() {
     Promise.all([fetchCloudGroups(user.id), fetchProfile(user.id)]).then(([cloudGroups, cloudProfile]) => {
       if (cancelled) return;
       localStorage.setItem(LAST_USER_KEY, user.id);
-      setGroups((localGroups) => {
-        const merged = [...cloudGroups];
-        if (differentUser) return merged.length ? merged : [legacyGroup({})];
-        localGroups.forEach((local) => { if (!merged.some((item) => item.id === local.id)) merged.push(local); });
-        return merged.length ? merged : [legacyGroup({})];
-      });
+      const merge = mergeGroups({ local: groupsRef.current, cloud: cloudGroups, meta: readSyncMeta(), userId: user.id, isNewAccount: differentUser });
+      setGroups(merge.groups.length ? merge.groups : [legacyGroup({})]);
+      const previousMeta = readSyncMeta();
+      const syncedNow = previousMeta.userId === user.id ? { ...previousMeta.groups } : {};
+      cloudGroups.forEach((cloudGroup) => { if (merge.groups.some((g) => g.id === cloudGroup.id && g.updatedAt === cloudGroup.updatedAt)) syncedNow[cloudGroup.id] = cloudGroup.updatedAt; });
+      writeSyncMeta({ userId: user.id, groups: syncedNow });
+      if (merge.replacedLocal.length) messageApi.warning('Newer cloud changes replaced your unsynced edits to: ' + merge.replacedLocal.join(', '));
+      if (merge.droppedLocal.length) messageApi.info('Removed groups deleted on another device: ' + merge.droppedLocal.join(', '));
       if (cloudProfile) {
         setProfile(cloudProfile);
         setSavedPeople(cloudProfile.saved_people || []);
