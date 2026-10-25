@@ -107,3 +107,22 @@ describe('exact-cent splitting', () => {
     expect(allocateCents(5, [0, 0])).toEqual([0, 0]);
   });
 });
+
+describe('choosing participants', () => {
+  it('equal split between 2 of 3 people gives 45/45/0 in balances', () => {
+    const split = computeSplit('equal', 90, ['Asha', 'Ben']);
+    expect(split).toEqual({ Asha: 45, Ben: 45 });
+    const balances = computeBalances(people, [{ payer: 'Asha', amount: 90, splitDetails: split }], []);
+    expect(balances.Chitra).toEqual({ paid: 0, share: 0, balance: 0 });
+    expect(balances.Ben.balance).toBe(-45);
+    expect(computeSettlements(balances)).toEqual([{ payer: 'Ben', payee: 'Asha', amount: 45 }]);
+  });
+  it('percentages and shares only involve the chosen people', () => {
+    expect(computeSplit('percentages', 100, ['Asha', 'Ben'], { Asha: 70, Ben: 30, Chitra: 99 })).toEqual({ Asha: 70, Ben: 30 });
+    expect(computeSplit('shares', 90, ['Ben', 'Chitra'], { Asha: 5, Ben: 1, Chitra: 2 })).toEqual({ Ben: 30, Chitra: 60 });
+  });
+  it('custom amounts ignore people who are not taking part and need at least one person', () => {
+    expect(validateSplit('unequal', 50, ['Asha', 'Ben'], { Asha: 20, Ben: 30, Chitra: 100 })).toBeNull();
+    expect(validateSplit('equal', 50, [])).toMatch(/at least one person/);
+  });
+});

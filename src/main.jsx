@@ -74,6 +74,7 @@ function AppView() {
   const [savedPersonValue, setSavedPersonValue] = useState('');
   const [splitType, setSplitType] = useState('equal');
   const [splitValues, setSplitValues] = useState({});
+  const [participantSel, setParticipantSel] = useState(null);
   const [expenseForm] = Form.useForm();
   const [paymentForm] = Form.useForm();
   const [profileForm] = Form.useForm();
@@ -102,6 +103,8 @@ function AppView() {
   const formatMoney = (value) => money.format(Number(value) || 0);
   const formatInCurrency = (value, code = currencyCode) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: code, maximumFractionDigits: 2 }).format(Number(value) || 0);
   const currencySymbol = money.formatToParts(0).find((part) => part.type === 'currency')?.value || '₹';
+
+  const participants = (participantSel ?? people).filter((name) => people.includes(name));
 
   const patchGroup = (updater) => {
     if (!activeGroup) return;
@@ -203,25 +206,30 @@ function AppView() {
     setNameValue(''); messageApi.success('People added');
   };
   const removePerson = (name) => { setPeople((current) => current.filter((person) => person !== name)); messageApi.info(name + ' removed from this group'); };
-  const getSplitDetails = (amount) => computeSplit(splitType, amount, people, splitValues);
-  const resetExpense = () => { expenseForm.resetFields(); setSplitType('equal'); setSplitValues({}); setEditingIndex(null); };
+  const getSplitDetails = (amount) => computeSplit(splitType, amount, participants, splitValues);
+  const resetExpense = () => { expenseForm.resetFields(); setSplitType('equal'); setSplitValues({}); setParticipantSel(null); setEditingIndex(null); };
   const submitExpense = (values) => {
     const amount = Number(values.amount); const splitDetails = getSplitDetails(amount);
-    const problem = validateSplit(splitType, amount, people, splitValues);
+    const problem = validateSplit(splitType, amount, participants, splitValues);
     if (problem) { messageApi.error(problem); return; }
     const previous = editingIndex === null ? null : expenses[editingIndex];
-    const expense = { id: previous?.id || makeId(), description: values.description.trim(), payer: values.payer, amount, splitType, splitDetails, createdAt: previous?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString(), category: values.category || 'Other', note: values.note || '' };
+    const expense = { id: previous?.id || makeId(), description: values.description.trim(), payer: values.payer, amount, splitType, splitDetails, participants: [...participants], splitValues: splitType === 'equal' ? undefined : { ...splitValues }, createdAt: previous?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString(), category: values.category || 'Other', note: values.note || '' };
     setExpenses((current) => editingIndex === null ? [expense, ...current] : current.map((item, index) => index === editingIndex ? expense : item));
     messageApi.success(editingIndex === null ? 'Expense added' : 'Expense updated'); resetExpense();
   };
   const editExpense = (index) => {
-    const expense = expenses[index]; const shares = Object.values(expense.splitDetails || {});
+    const expense = expenses[index]; const details = expense.splitDetails || {};
+    const shares = Object.values(details);
     const wasEqual = shares.length > 0 && shares.every((share) => Math.abs(Number(share) - Number(expense.amount) / shares.length) < 0.01);
     const type = expense.splitType || (wasEqual ? 'equal' : 'unequal');
-    setEditingIndex(index); setSplitType(type);
-    setSplitValues(type === 'percentages'
-      ? Object.fromEntries(people.map((person) => [person, expense.amount ? ((expense.splitDetails?.[person] || 0) / expense.amount) * 100 : 0]))
-      : type === 'shares' ? Object.fromEntries(people.map((person) => [person, expense.splitDetails?.[person] || 0])) : expense.splitDetails || {});
+    // Older expenses have no stored participants: fall back to everyone who has a share.
+    const stored = Array.isArray(expense.participants) ? expense.participants : Object.keys(details).filter((name) => Number(details[name]) > 0 || type !== 'equal');
+    const restored = stored.filter((name) => people.includes(name));
+    setEditingIndex(index); setSplitType(type); setParticipantSel(restored.length === people.length ? null : restored);
+    if (expense.splitValues && type !== 'equal') setSplitValues({ ...expense.splitValues });
+    else setSplitValues(type === 'percentages'
+      ? Object.fromEntries(people.map((person) => [person, expense.amount ? Math.round(((details[person] || 0) / expense.amount) * 10000) / 100 : 0]))
+      : type === 'shares' ? Object.fromEntries(people.map((person) => [person, details[person] || 0])) : { ...details });
     expenseForm.setFieldsValue({ description: expense.description, payer: expense.payer, amount: expense.amount, category: expense.category || 'Other', note: expense.note || '' });
     document.getElementById('add-expense')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
@@ -427,8 +435,8 @@ function AppView() {
           <Col xs={12} sm={8} md={4}><Form.Item name="amount" label="Total amount" rules={[{ required: true, message: 'Enter the total' }]}><InputNumber size="large" min={0.01} precision={2} prefix={currencySymbol} placeholder="0.00" className="full-width" /></Form.Item></Col>
           <Col xs={12} sm={8} md={4}><Form.Item name="category" label="Category" initialValue="Other"><Select size="large" options={['Food & drink', 'Travel', 'Stay', 'Groceries', 'Transport', 'Entertainment', 'Other'].map((value) => ({ label: value, value }))} /></Form.Item></Col>
           <Col xs={12} sm={8} md={4}><Form.Item label="Split method"><Select size="large" value={splitType} onChange={(value) => { setSplitType(value); setSplitValues({}); }} options={splitTypes} /></Form.Item></Col>
-        </Row><Form.Item name="note" label="Note (optional)"><Input placeholder="Add context for the group" maxLength={NOTE_MAX} /></Form.Item>
-        {splitType !== 'equal' && <div className="split-editor"><div className="split-editor-title"><Text strong>{splitType === 'unequal' ? 'Enter each person’s amount' : splitType === 'shares' ? 'Set shares for each person' : 'Set each person’s percentage'}</Text></div><Row gutter={[12, 4]}>{people.map((person) => <Col xs={12} sm={8} md={6} key={person}><Form.Item label={person}><InputNumber min={0} precision={splitType === 'percentages' ? 2 : 3} suffix={splitType === 'percentages' ? '%' : splitType === 'shares' ? 'shares' : undefined} prefix={splitType === 'unequal' ? currencySymbol : undefined} className="full-width" value={splitValues[person] ?? (splitType === 'unequal' ? undefined : 0)} onChange={(value) => setSplitValues((current) => ({ ...current, [person]: value }))} /></Form.Item></Col>)}</Row></div>}
+        </Row><Form.Item label="Split between" validateStatus={participants.length ? undefined : 'error'} help={participants.length ? undefined : 'Choose at least one person'}><Select mode="multiple" size="large" value={participants} onChange={(value) => setParticipantSel(value.length === people.length ? null : value)} options={participantOptions} placeholder="Everyone" maxTagCount="responsive" /></Form.Item><Form.Item name="note" label="Note (optional)"><Input placeholder="Add context for the group" maxLength={NOTE_MAX} /></Form.Item>
+        {splitType !== 'equal' && <div className="split-editor"><div className="split-editor-title"><Text strong>{splitType === 'unequal' ? 'Enter each person’s amount' : splitType === 'shares' ? 'Set shares for each person' : 'Set each person’s percentage'}</Text></div><Row gutter={[12, 4]}>{participants.map((person) => <Col xs={12} sm={8} md={6} key={person}><Form.Item label={person}><InputNumber min={0} precision={splitType === 'percentages' ? 2 : 3} suffix={splitType === 'percentages' ? '%' : splitType === 'shares' ? 'shares' : undefined} prefix={splitType === 'unequal' ? currencySymbol : undefined} className="full-width" value={splitValues[person] ?? (splitType === 'unequal' ? undefined : 0)} onChange={(value) => setSplitValues((current) => ({ ...current, [person]: value }))} /></Form.Item></Col>)}</Row></div>}
         <div className="form-actions"><Button onClick={resetExpense}>{editingIndex === null ? 'Clear' : 'Cancel editing'}</Button><Button type="primary" htmlType="submit" icon={editingIndex === null ? <PlusOutlined /> : <CheckOutlined />}>{editingIndex === null ? 'Add expense' : 'Save changes'}</Button></div></Form>
         <Divider orientation="left" plain>Record a payment</Divider><div className="payment-entry"><Form form={paymentForm} layout="inline" onFinish={recordPayment} className="payment-form">
           <Form.Item name="payer" rules={[{ required: true, message: 'Choose who paid' }]}><Select placeholder="From" options={participantOptions} className="payment-select" /></Form.Item><SwapOutlined className="muted-icon payment-swap" />
