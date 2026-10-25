@@ -21,6 +21,7 @@ import {
 } from './supabase';
 import { computeBalances, computeSettlements, computeSplit, validateSplit } from './lib/splits';
 import ErrorBoundary from './ErrorBoundary';
+import { DESCRIPTION_MAX, GROUP_NAME_MAX, NOTE_MAX } from './lib/limits';
 
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
@@ -301,7 +302,10 @@ function AppView() {
     return false;
   };
   const createGroup = (values) => {
-    const group = { id: makeId(), name: values.name.trim(), people: [], expenses: [], payments: [], savedSplits: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const name = String(values.name || '').trim();
+    if (!name) { messageApi.error('Add a group name'); return; }
+    if (name.length > GROUP_NAME_MAX) { messageApi.error('Group names can have at most ' + GROUP_NAME_MAX + ' characters'); return; }
+    const group = { id: makeId(), name, people: [], expenses: [], payments: [], savedSplits: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     setGroups((current) => [group, ...current]); setActiveGroupId(group.id); setPage('dashboard'); setGroupModal(false); groupForm.resetFields(); messageApi.success(group.name + ' created');
   };
   const switchGroup = (groupId) => { setActiveGroupId(groupId); setPage('dashboard'); window.scrollTo({ top: 0, behavior: 'smooth' }); };
@@ -418,12 +422,12 @@ function AppView() {
     {people.length > 0 ? <div className="feature-content">
       <section className="section-card" id="add-expense"><div className="section-heading"><div><Text className="eyebrow">GROUP WORKSPACE</Text><Title level={3}>{editingIndex === null ? 'Add an expense' : 'Edit expense'}</Title></div><div className="step-pill">01 <span>·</span> ACTIVITY</div></div>
         <Form form={expenseForm} layout="vertical" onFinish={submitExpense} className="expense-form"><Row gutter={16}>
-          <Col xs={24} md={7}><Form.Item name="description" label="What was it for?" rules={[{ required: true, whitespace: true, message: 'Add a short description' }]}><Input size="large" placeholder="Dinner, groceries, taxi…" /></Form.Item></Col>
+          <Col xs={24} md={7}><Form.Item name="description" label="What was it for?" rules={[{ required: true, whitespace: true, message: 'Add a short description' }]}><Input size="large" placeholder="Dinner, groceries, taxi…" maxLength={DESCRIPTION_MAX} showCount /></Form.Item></Col>
           <Col xs={12} sm={8} md={5}><Form.Item name="payer" label="Who paid?" rules={[{ required: true, message: 'Choose who paid' }]}><Select size="large" placeholder="Select a person" options={participantOptions} /></Form.Item></Col>
           <Col xs={12} sm={8} md={4}><Form.Item name="amount" label="Total amount" rules={[{ required: true, message: 'Enter the total' }]}><InputNumber size="large" min={0.01} precision={2} prefix={currencySymbol} placeholder="0.00" className="full-width" /></Form.Item></Col>
           <Col xs={12} sm={8} md={4}><Form.Item name="category" label="Category" initialValue="Other"><Select size="large" options={['Food & drink', 'Travel', 'Stay', 'Groceries', 'Transport', 'Entertainment', 'Other'].map((value) => ({ label: value, value }))} /></Form.Item></Col>
           <Col xs={12} sm={8} md={4}><Form.Item label="Split method"><Select size="large" value={splitType} onChange={(value) => { setSplitType(value); setSplitValues({}); }} options={splitTypes} /></Form.Item></Col>
-        </Row><Form.Item name="note" label="Note (optional)"><Input placeholder="Add context for the group" maxLength={200} /></Form.Item>
+        </Row><Form.Item name="note" label="Note (optional)"><Input placeholder="Add context for the group" maxLength={NOTE_MAX} /></Form.Item>
         {splitType !== 'equal' && <div className="split-editor"><div className="split-editor-title"><Text strong>{splitType === 'unequal' ? 'Enter each person’s amount' : splitType === 'shares' ? 'Set shares for each person' : 'Set each person’s percentage'}</Text></div><Row gutter={[12, 4]}>{people.map((person) => <Col xs={12} sm={8} md={6} key={person}><Form.Item label={person}><InputNumber min={0} precision={splitType === 'percentages' ? 2 : 3} suffix={splitType === 'percentages' ? '%' : splitType === 'shares' ? 'shares' : undefined} prefix={splitType === 'unequal' ? currencySymbol : undefined} className="full-width" value={splitValues[person] ?? (splitType === 'unequal' ? undefined : 0)} onChange={(value) => setSplitValues((current) => ({ ...current, [person]: value }))} /></Form.Item></Col>)}</Row></div>}
         <div className="form-actions"><Button onClick={resetExpense}>{editingIndex === null ? 'Clear' : 'Cancel editing'}</Button><Button type="primary" htmlType="submit" icon={editingIndex === null ? <PlusOutlined /> : <CheckOutlined />}>{editingIndex === null ? 'Add expense' : 'Save changes'}</Button></div></Form>
         <Divider orientation="left" plain>Record a payment</Divider><div className="payment-entry"><Form form={paymentForm} layout="inline" onFinish={recordPayment} className="payment-form">
@@ -482,7 +486,7 @@ function AppView() {
     <Modal title="Saved split details" open={Boolean(selectedSnapshot)} onCancel={() => setSelectedSnapshot(null)} footer={null} width={760} destroyOnHidden>
       {selectedSnapshot && <><Space wrap><Tag color="blue">{selectedSnapshot.groupName}</Tag><Text type="secondary">Saved {new Date(selectedSnapshot.savedAt).toLocaleString()}</Text></Space><Row gutter={12} className="snapshot-summary"><Col span={8}><Statistic title="Total expenses" value={selectedSnapshot.total || 0} precision={2} formatter={(value) => formatInCurrency(value, selectedSnapshot.currencyCode)} /></Col><Col span={8}><Statistic title="People" value={selectedSnapshot.people?.length || 0} /></Col><Col span={8}><Statistic title="Suggested payments" value={selectedSnapshot.settlements?.length || 0} /></Col></Row><Title level={5}>Expenses</Title>{selectedSnapshot.expenses?.length ? <List dataSource={selectedSnapshot.expenses} renderItem={(expense) => <List.Item><List.Item.Meta title={expense.description} description={`${expense.category || 'Other'} · Paid by ${expense.payer}`} /><Text strong>{formatInCurrency(expense.amount, selectedSnapshot.currencyCode)}</Text></List.Item>} /> : <Empty description="No expenses were in this saved split." />}<Title level={5}>Settle up</Title>{selectedSnapshot.settlements?.length ? selectedSnapshot.settlements.map((item, index) => <div className="settlement-row" key={item.payer + item.payee + index}><Text strong>{item.payer}</Text><ArrowDownOutlined className="arrow-icon" /><Text strong>{item.payee}</Text><Text strong className="settlement-amount">{formatInCurrency(item.amount, selectedSnapshot.currencyCode)}</Text></div>) : <Text type="secondary">Everyone was settled up.</Text>}</>}
     </Modal>
-    <Modal title="Create a group" open={groupModal} onCancel={() => setGroupModal(false)} footer={null} destroyOnHidden><Form form={groupForm} layout="vertical" onFinish={createGroup} className="group-create-form"><Form.Item name="name" label="Group name" rules={[{ required: true, whitespace: true, message: 'Add a group name' }, { max: 80 }]}><Input autoFocus placeholder="Weekend in Goa" /></Form.Item><Button type="primary" block htmlType="submit" icon={<PlusOutlined />}>Create group</Button></Form></Modal>
+    <Modal title="Create a group" open={groupModal} onCancel={() => setGroupModal(false)} footer={null} destroyOnHidden><Form form={groupForm} layout="vertical" onFinish={createGroup} className="group-create-form"><Form.Item name="name" label="Group name" rules={[{ required: true, whitespace: true, message: 'Add a group name' }, { max: GROUP_NAME_MAX, message: 'Use at most ' + GROUP_NAME_MAX + ' characters' }]}><Input autoFocus placeholder="Weekend in Goa" maxLength={GROUP_NAME_MAX} showCount /></Form.Item><Button type="primary" block htmlType="submit" icon={<PlusOutlined />}>Create group</Button></Form></Modal>
   </AntApp></ConfigProvider>;
 }
 

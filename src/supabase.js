@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { GROUP_NAME_MAX } from './lib/limits';
 
 const url = import.meta.env.VITE_SUPABASE_URL;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -30,7 +31,6 @@ export async function fetchCloudGroups(userId) {
   }));
 }
 
-export const GROUP_NAME_MAX = 80;
 
 const toRow = (group, userId) => ({
   id: group.id,
