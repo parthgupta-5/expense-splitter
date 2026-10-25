@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeBalances, computeSettlements, computeSplit, validateSplit } from './splits';
+import { allocateCents, computeBalances, computeSettlements, computeSplit, toCents, validateSplit } from './splits';
 
 const people = ['Asha', 'Ben', 'Chitra'];
 const sum = (obj) => Math.round(Object.values(obj).reduce((a, b) => a + b, 0) * 100) / 100;
@@ -64,5 +64,46 @@ describe('balances and settlements', () => {
   it('tolerates people who appear in expenses but were removed from the group', () => {
     const balances = computeBalances(['Asha'], [{ payer: 'Zed', amount: 10, splitDetails: { Asha: 10 } }], []);
     expect(balances.Zed.balance).toBe(10);
+  });
+});
+
+describe('exact-cent splitting', () => {
+  it('3 people splitting 100 equally', () => {
+    expect(computeSplit('equal', 100, people)).toEqual({ Asha: 33.34, Ben: 33.33, Chitra: 33.33 });
+  });
+  it('100 split by shares 1:1:1 sums to exactly 100', () => {
+    const split = computeSplit('shares', 100, people, { Asha: 1, Ben: 1, Chitra: 1 });
+    expect(toCents(sum(split))).toBe(10000);
+  });
+  it('percentages 33.33/33.33/33.34 sum exactly and validate', () => {
+    const values = { Asha: 33.33, Ben: 33.33, Chitra: 33.34 };
+    expect(validateSplit('percentages', 100, people, values)).toBeNull();
+    expect(computeSplit('percentages', 100, people, values)).toEqual({ Asha: 33.33, Ben: 33.33, Chitra: 33.34 });
+  });
+  it('handles the smallest and a large amount', () => {
+    expect(toCents(sum(computeSplit('equal', 0.01, people)))).toBe(1);
+    expect(computeSplit('equal', 0.01, people)).toEqual({ Asha: 0.01, Ben: 0, Chitra: 0 });
+    expect(toCents(sum(computeSplit('equal', 1000000, people)))).toBe(100000000);
+  });
+  it('custom amounts are compared in whole cents with no tolerance', () => {
+    expect(validateSplit('unequal', 100, people, { Asha: 33.33, Ben: 33.33, Chitra: 33.33 })).toMatch(/add up/);
+    expect(validateSplit('unequal', 100, people, { Asha: 33.33, Ben: 33.33, Chitra: 33.34 })).toBeNull();
+  });
+  it('every split type sums exactly to the total for many random inputs', () => {
+    let seed = 7;
+    const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    for (let i = 0; i < 300; i += 1) {
+      const amount = Math.round(rand() * 5000000) / 100 + 0.01;
+      const n = 1 + Math.floor(rand() * 6);
+      const group = Array.from({ length: n }, (_, k) => 'P' + k);
+      const weights = Object.fromEntries(group.map((p) => [p, Math.round(rand() * 900) / 100 + 0.01]));
+      ['equal', 'shares', 'percentages'].forEach((type) => {
+        expect(toCents(sum(computeSplit(type, amount, group, weights)))).toBe(toCents(amount));
+      });
+    }
+  });
+  it('allocateCents never goes negative and ignores zero weights', () => {
+    expect(allocateCents(100, [1, 0, 1])).toEqual([50, 0, 50]);
+    expect(allocateCents(5, [0, 0])).toEqual([0, 0]);
   });
 });
