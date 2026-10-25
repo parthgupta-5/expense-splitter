@@ -156,7 +156,7 @@ file into components and hooks; and a larger test suite.
 ## AI assistance
 
 AI tools (Claude) were used for debugging, refactoring, writing tests and documentation. The author is responsible
-for the final product. <!-- TODO: owner to confirm or adjust this statement -->
+for the final product. <!-- Owner: please confirm or adjust this statement before submitting. -->
 
 ## Originality
 
