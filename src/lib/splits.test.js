@@ -138,3 +138,27 @@ describe('paymentExceedsOwed', () => {
     expect(paymentExceedsOwed(balances, 'Asha', 'Ben', 5)).toBe(true);
   });
 });
+
+describe('settlement plan on random groups', () => {
+  it('balances sum to zero and the plan clears everyone with at most N-1 transfers', () => {
+    let seed = 42;
+    const rand = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+    for (let round = 0; round < 200; round += 1) {
+      const n = 2 + Math.floor(rand() * 6);
+      const group = Array.from({ length: n }, (_, k) => 'P' + k);
+      const expenses = Array.from({ length: 1 + Math.floor(rand() * 8) }, () => {
+        const amount = Math.round(rand() * 100000) / 100 + 0.01;
+        const members = group.filter(() => rand() > 0.3);
+        const chosen = members.length ? members : [group[0]];
+        return { payer: group[Math.floor(rand() * n)], amount, splitDetails: computeSplit('equal', amount, chosen) };
+      });
+      const balances = computeBalances(group, expenses, []);
+      const net = Object.values(balances).reduce((s, b) => s + toCents(b.balance), 0);
+      expect(net).toBe(0);
+      const plan = computeSettlements(balances);
+      expect(plan.length).toBeLessThanOrEqual(n - 1);
+      const after = computeBalances(group, expenses, plan);
+      Object.values(after).forEach((b) => expect(Math.abs(b.balance)).toBeLessThan(0.01));
+    }
+  });
+});
