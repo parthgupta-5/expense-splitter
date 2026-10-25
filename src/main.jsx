@@ -1,14 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
-  App as AntApp, Avatar, Badge, Button, Card, Col, ConfigProvider, Divider,
+  Alert, App as AntApp, Avatar, Badge, Button, Card, Col, ConfigProvider, Divider,
   Empty, Form, Input, InputNumber, Layout, List, Modal, Popconfirm, Row, Select,
-  Space, Statistic, Table, Tabs, Tag, Timeline, Tooltip, Typography, Upload, message,
+  Space, Spin, Statistic, Table, Tabs, Tag, Timeline, Tooltip, Typography, Upload, message,
   theme as antdTheme,
 } from 'antd';
 import {
   AppstoreOutlined, ArrowDownOutlined, BarChartOutlined, CheckCircleFilled,
-  CheckOutlined, CloudOutlined, CopyOutlined, DeleteOutlined, DownloadOutlined,
+  CheckOutlined, CloseCircleFilled, CloudOutlined, CopyOutlined, DeleteOutlined, DownloadOutlined,
   EditOutlined, HistoryOutlined, LoginOutlined, LogoutOutlined, MoonOutlined,
   PlusOutlined, SaveOutlined, SettingOutlined, SwapOutlined, SunOutlined, TeamOutlined,
   UploadOutlined, UserOutlined, WalletOutlined,
@@ -24,6 +24,7 @@ import ErrorBoundary from './ErrorBoundary';
 import { toCsv } from './lib/csv';
 import { mergeGroups } from './lib/sync';
 import { isHttpsUrl } from './lib/url';
+import { friendlyError } from './lib/errors';
 import { parseBackupText, sanitizeGroup, sanitizeGroups } from './lib/backup';
 import { describeRejected, parseNames, removalStatus } from './lib/people';
 import { DESCRIPTION_MAX, GROUP_NAME_MAX, NOTE_MAX } from './lib/limits';
@@ -99,6 +100,7 @@ function AppView() {
   const [selectedSnapshot, setSelectedSnapshot] = useState(null);
   const [groupModal, setGroupModal] = useState(false);
   const [cloudReady, setCloudReady] = useState(false);
+  const [syncError, setSyncError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [messageApi, contextHolder] = message.useMessage();
 
@@ -159,7 +161,7 @@ function AppView() {
     }
     Promise.all([fetchCloudGroups(user.id), fetchProfile(user.id)]).then(([cloudGroups, cloudProfile]) => {
       if (cancelled) return;
-      localStorage.setItem(LAST_USER_KEY, user.id);
+      localStorage.setItem(LAST_USER_KEY, user.id); setSyncError(false);
       const merge = mergeGroups({ local: groupsRef.current, cloud: cloudGroups, meta: readSyncMeta(), userId: user.id, isNewAccount: differentUser });
       setGroups(merge.groups.length ? merge.groups : [legacyGroup({})]);
       const previousMeta = readSyncMeta();
@@ -176,7 +178,7 @@ function AppView() {
       } else profileForm.setFieldsValue({ display_name: user.user_metadata?.display_name || '', avatar_url: '' });
       setCloudReady(true);
     }).catch((error) => {
-      if (!cancelled) { messageApi.error('Could not load cloud data: ' + error.message); setCloudReady(true); }
+      if (!cancelled) { messageApi.error('Could not load cloud data: ' + friendlyError(error)); setSyncError(true); setCloudReady(true); }
     });
     return () => { cancelled = true; };
   }, [user?.id]);
@@ -191,8 +193,9 @@ function AppView() {
         const synced = { ...known };
         saved.forEach(({ id }) => { synced[id] = groups.find((g) => g.id === id)?.updatedAt; });
         writeSyncMeta({ userId: user.id, groups: synced });
+        setSyncError(failed.length > 0);
         if (failed.length) messageApi.error('Could not sync: ' + failed.map((item) => item.name || 'Untitled group').join(', ') + '. Your data is still saved on this device.');
-      }).catch((error) => messageApi.error('Cloud save failed: ' + error.message));
+      }).catch((error) => { setSyncError(true); messageApi.error('Cloud save failed: ' + friendlyError(error)); });
     }, 650);
     return () => window.clearTimeout(timer);
   }, [groups, user?.id, cloudReady]);
@@ -344,7 +347,7 @@ function AppView() {
   const switchGroup = (groupId) => { setActiveGroupId(groupId); setPage('dashboard'); window.scrollTo({ top: 0, behavior: 'smooth' }); };
   const deleteGroup = async (group) => {
     if (groups.length < 2) { messageApi.warning('Keep at least one group'); return; }
-    try { if (user) await removeCloudGroup(group.id); } catch (error) { messageApi.error('Cloud delete failed: ' + error.message); return; }
+    try { if (user) await removeCloudGroup(group.id); } catch (error) { messageApi.error('Cloud delete failed: ' + friendlyError(error)); return; }
     const remaining = groups.filter((item) => item.id !== group.id); setGroups(remaining);
     if (activeGroupId === group.id) setActiveGroupId(remaining[0].id);
     messageApi.success('Group deleted');
@@ -363,7 +366,7 @@ function AppView() {
         messageApi.success('Signed in');
       }
       setAuthModal(false); authForm.resetFields();
-    } catch (error) { messageApi.error(error.message); } finally { setBusy(false); }
+    } catch (error) { messageApi.error(friendlyError(error)); } finally { setBusy(false); }
   };
   const saveProfileChanges = async (values) => {
     const updated = { ...(profile || {}), display_name: values.display_name || '', avatar_url: values.avatar_url || '' };
@@ -372,7 +375,7 @@ function AppView() {
       try {
         await saveProfile(user.id, { ...updated, currency_code: currencyCode, preferences, saved_people: savedPeople, updated_at: new Date().toISOString() });
         await supabase.auth.updateUser({ data: { display_name: values.display_name || '' } }); messageApi.success('Profile saved to your account');
-      } catch (error) { messageApi.error('Profile save failed: ' + error.message); }
+      } catch (error) { messageApi.error('Profile save failed: ' + friendlyError(error)); }
     } else messageApi.success('Profile saved on this device. Sign in to sync it.');
   };
   const resetLocalState = () => {
@@ -382,7 +385,7 @@ function AppView() {
     localStorage.removeItem(STATE_KEY); localStorage.removeItem(LAST_USER_KEY); localStorage.removeItem(SYNC_META_KEY);
   };
   const finishSignOut = async () => {
-    try { if (supabase) await supabase.auth.signOut(); } catch (error) { messageApi.error('Could not sign out: ' + error.message); return; }
+    try { if (supabase) await supabase.auth.signOut(); } catch (error) { messageApi.error('Could not sign out: ' + friendlyError(error)); return; }
     setUser(null); setProfile(null); setCloudReady(false); resetLocalState();
     messageApi.success('Signed out. This device no longer holds your groups.');
   };
@@ -403,7 +406,7 @@ function AppView() {
   };
   useEffect(() => {
     if (user && cloudReady) saveProfile(user.id, { display_name: profile?.display_name || user.user_metadata?.display_name || '', avatar_url: profile?.avatar_url || '', currency_code: currencyCode, preferences, saved_people: savedPeople, updated_at: new Date().toISOString() })
-      .catch((error) => messageApi.error('Profile sync failed: ' + error.message));
+      .catch((error) => messageApi.error('Profile sync failed: ' + friendlyError(error)));
   }, [preferences, savedPeople]);
   useEffect(() => {
     if (!user || !pendingAuthAction) return;
@@ -472,13 +475,13 @@ function AppView() {
       </section>
       <section className="section-card activity-card"><div className="section-heading"><div><Text className="eyebrow">THE FULL PICTURE</Text><Title level={3}>Group activity</Title></div><Space wrap><Tooltip title={!expenses.length && !payments.length ? 'Add an expense or payment first' : 'Save a snapshot of this split'}><Button icon={<SaveOutlined />} disabled={!expenses.length && !payments.length} onClick={requestSaveSplit}>Save split</Button></Tooltip><Button icon={<DownloadOutlined />} onClick={exportCsv}>Export CSV</Button><Button icon={<CopyOutlined />} onClick={copySummary}>Copy settlement</Button></Space></div>
         <Tabs items={[
-          { key: 'expenses', label: <span>Expenses <Tag bordered={false}>{expenses.length}</Tag></span>, children: <Table size="middle" rowKey="id" columns={expenseColumns} dataSource={expenses.map((expense, index) => ({ ...expense, _index: index }))} pagination={{ pageSize: 6, hideOnSinglePage: true }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={false} /> }} scroll={{ x: 660 }} /> },
+          { key: 'expenses', label: <span>Expenses <Tag bordered={false}>{expenses.length}</Tag></span>, children: <Table size="middle" rowKey="id" columns={expenseColumns} dataSource={expenses.map((expense, index) => ({ ...expense, _index: index }))} pagination={{ pageSize: 6, hideOnSinglePage: true }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No expenses yet. Add the first one above." /> }} scroll={{ x: 660 }} /> },
           { key: 'balances', label: <span>Balances <Tag bordered={false}>{Object.keys(balances).length}</Tag></span>, children: <><Table size="middle" rowKey="name" columns={balanceColumns} dataSource={Object.entries(balances).map(([name, values]) => ({ name, ...values }))} pagination={false} />{settlements.length > 0 && <div className="settlement-box"><div className="settlement-heading"><div><Title level={5}>Settle up</Title></div><Tag color="green" icon={<CheckCircleFilled />}>{settlements.length} suggested payments</Tag></div>{settlements.map((item, index) => <div className="settlement-row" key={item.payer + item.payee + index}><Avatar size="small" className="settlement-avatar">{item.payer.slice(0, 1).toUpperCase()}</Avatar><Text strong>{item.payer}</Text><ArrowDownOutlined className="arrow-icon" /><Text strong>{item.payee}</Text><Text strong className="settlement-amount">{formatMoney(item.amount)}</Text></div>)}</div>}</> },
-          { key: 'payments', label: <span>Payments <Tag bordered={false}>{payments.length}</Tag></span>, children: <Table size="middle" rowKey="id" columns={paymentColumns} dataSource={payments.map((payment, index) => ({ ...payment, _index: index }))} pagination={{ pageSize: 5, hideOnSinglePage: true }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={false} /> }} /> },
+          { key: 'payments', label: <span>Payments <Tag bordered={false}>{payments.length}</Tag></span>, children: <Table size="middle" rowKey="id" columns={paymentColumns} dataSource={payments.map((payment, index) => ({ ...payment, _index: index }))} pagination={{ pageSize: 5, hideOnSinglePage: true }} locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No payments recorded yet." /> }} /> },
         ]} />
       </section>
     </div> : null}
-    <footer className="page-footer"><Tag bordered={false} icon={user ? <CloudOutlined /> : <CheckCircleFilled />} color={user ? 'blue' : 'success'}>{user && cloudReady ? 'Cloud synced' : user ? 'Syncing' : 'Saved locally'}</Tag></footer>
+    <footer className="page-footer"><Tag bordered={false} icon={user ? (syncError ? <CloseCircleFilled /> : <CloudOutlined />) : <CheckCircleFilled />} color={user && syncError ? 'error' : user ? 'blue' : 'success'}>{user && syncError ? 'Sync problem: changes are kept on this device' : user && cloudReady ? 'Cloud synced' : user ? 'Syncing…' : 'Saved locally'}</Tag></footer>
   </>;
 
   const renderGroups = () => <section className="page-panel"><div className="page-toolbar"><Button type="primary" icon={<PlusOutlined />} onClick={() => setGroupModal(true)}>New group</Button></div><Row gutter={[16, 16]}>{groups.map((group, index) => {
@@ -486,10 +489,10 @@ function AppView() {
     return <Col xs={24} sm={12} xl={8} key={group.id}><Card className={'group-card ' + (group.id === activeGroupId ? 'group-card-active' : '')} hoverable onClick={() => switchGroup(group.id)}><div className="group-card-top"><Avatar className={'group-avatar avatar-tone-' + (index % 5)} icon={<TeamOutlined />} /><Tag color={group.id === activeGroupId ? 'blue' : 'default'}>{group.id === activeGroupId ? 'Current' : 'Saved'}</Tag></div><Title level={4}>{group.name}</Title><Text type="secondary">{group.people?.length || 0} people · {group.expenses?.length || 0} expenses</Text><div className="group-card-bottom"><Statistic title="Group spend" value={groupTotal} precision={2} prefix={currencySymbol} /><Popconfirm title="Delete this group and its saved activity?" description="This removes the group from your account and local device." onConfirm={(event) => { event?.stopPropagation?.(); deleteGroup(group); }} onCancel={(event) => event?.stopPropagation?.()}><Button type="text" danger icon={<DeleteOutlined />} onClick={(event) => event.stopPropagation()} aria-label={'Delete ' + group.name} /></Popconfirm></div><Button block onClick={(event) => { event.stopPropagation(); switchGroup(group.id); }}>Open group</Button></Card></Col>;
   })}</Row>{groups.length === 0 && <Empty description={false}><Button type="primary" onClick={() => setGroupModal(true)}>Create a group</Button></Empty>}</section>;
 
-  const renderHistory = () => !user && supabaseConfigured ? <section className="page-panel account-gate"><div className="gate-icon"><HistoryOutlined /></div><Text className="eyebrow">YOUR SAVED ACTIVITY</Text><Title level={2}>Keep your history with you</Title><Button type="primary" icon={<LoginOutlined />} onClick={() => openAccountGate('history', 'history')}>Continue with an account</Button></section> : <section className="page-panel"><div className="page-toolbar"><Button icon={<DownloadOutlined />} onClick={exportBackup}>Download backup</Button></div>
+  const renderHistory = () => !user && supabaseConfigured ? <section className="page-panel account-gate"><div className="gate-icon"><HistoryOutlined /></div><Text className="eyebrow">YOUR SAVED ACTIVITY</Text><Title level={2}>Keep your history with you</Title><Button type="primary" icon={<LoginOutlined />} onClick={() => openAccountGate('history', 'history')}>Continue with an account</Button></section> : user && !cloudReady ? <section className="page-panel"><Spin tip="Loading your history…"><div style={{ minHeight: 120 }} /></Spin></section> : <section className="page-panel"><div className="page-toolbar"><Button icon={<DownloadOutlined />} onClick={exportBackup}>Download backup</Button></div>{user && syncError && <Alert type="warning" showIcon message="Cloud history could not be loaded. Showing what is saved on this device." style={{ marginBottom: 12 }} />}
     {savedSnapshots.length > 0 && <><Title level={4}>Saved splits</Title><Row gutter={[12, 12]} className="snapshot-grid">{savedSnapshots.map((snapshot) => <Col xs={24} md={12} key={snapshot.id}><Card size="small" className="snapshot-card"><Space wrap><Tag color="blue">{snapshot.groupName}</Tag><Text type="secondary">{new Date(snapshot.savedAt).toLocaleString()}</Text></Space><div className="history-description"><div><Text strong>{snapshot.expenses?.length || 0} expenses · {snapshot.people?.length || 0} people</Text><br /><Text type="secondary">{snapshot.settlements?.length || 0} suggested payments</Text></div><Text strong>{formatInCurrency(snapshot.total, snapshot.currencyCode)}</Text></div><div className="snapshot-actions"><Button type="link" onClick={() => setSelectedSnapshot(snapshot)}>View snapshot</Button><Popconfirm title="Delete this saved split?" onConfirm={() => setGroups((current) => current.map((group) => group.id === snapshot.groupId ? { ...group, savedSplits: (group.savedSplits || []).filter((item) => item.id !== snapshot.id) } : group))}><Button type="text" danger icon={<DeleteOutlined />} aria-label="Delete saved split" /></Popconfirm></div></Card></Col>)}</Row><Divider /></>}
     {activity.length ? <Timeline className="history-timeline" items={activity.map((item) => ({ color: item.kind === 'payment' ? 'green' : 'blue', children: <Card size="small" className="history-item"><Space wrap><Tag color={item.kind === 'payment' ? 'green' : 'blue'}>{item.kind === 'payment' ? 'Payment' : item.category || 'Expense'}</Tag><Tag>{item.groupName}</Tag><Text type="secondary">{item.createdAt ? new Date(item.createdAt).toLocaleString() : 'Date not recorded'}</Text></Space><div className="history-description"><Text strong>{item.kind === 'payment' ? item.payer + ' paid ' + item.payee : item.description}</Text><Text strong>{formatMoney(item.amount)}</Text></div></Card> }))}
-    /> : <Empty className="empty-panel" description={false} />}</section>;
+    /> : <Empty className="empty-panel" description="No activity yet. Add an expense to see it here." />}</section>;
 
   const addSavedPeople = () => {
     const parsed = parseNames(savedPersonValue, savedPeople);
@@ -498,7 +501,7 @@ function AppView() {
     if (!parsed.valid.length) return;
     setSavedPeople((current) => [...current, ...parsed.valid]); setSavedPersonValue(''); messageApi.success('People saved to your list');
   };
-  const renderPeople = () => <section className="page-panel"><Space.Compact className="add-person library-add"><Input value={savedPersonValue} onChange={(event) => setSavedPersonValue(event.target.value)} onPressEnter={addSavedPeople} placeholder="Add one or more names" aria-label="Save people" /><Button type="primary" icon={<PlusOutlined />} onClick={addSavedPeople}>Save people</Button></Space.Compact>{savedPeople.length ? <List className="saved-people-list" dataSource={savedPeople} renderItem={(person) => <List.Item actions={[<Button key="add" type="link" onClick={() => { if (people.some((name) => name.toLowerCase() === person.toLowerCase())) { messageApi.info(person + ' is already in this group'); return; } setPeople((current) => [...current, person]); messageApi.success(person + ' added to ' + (activeGroup?.name || 'group')); }}>Add to {activeGroup?.name || 'group'}</Button>, <Popconfirm key="remove" title={'Remove ' + person + ' from saved people?'} onConfirm={() => setSavedPeople((current) => current.filter((name) => name !== person))}><Button type="text" danger icon={<DeleteOutlined />} aria-label={'Remove ' + person} /></Popconfirm>]}><List.Item.Meta avatar={<Avatar>{person.slice(0, 1).toUpperCase()}</Avatar>} title={person} /></List.Item>} /> : <Empty className="empty-panel" description={false} />}</section>;
+  const renderPeople = () => <section className="page-panel"><Space.Compact className="add-person library-add"><Input value={savedPersonValue} onChange={(event) => setSavedPersonValue(event.target.value)} onPressEnter={addSavedPeople} placeholder="Add one or more names" aria-label="Save people" /><Button type="primary" icon={<PlusOutlined />} onClick={addSavedPeople}>Save people</Button></Space.Compact>{savedPeople.length ? <List className="saved-people-list" dataSource={savedPeople} renderItem={(person) => <List.Item actions={[<Button key="add" type="link" onClick={() => { if (people.some((name) => name.toLowerCase() === person.toLowerCase())) { messageApi.info(person + ' is already in this group'); return; } setPeople((current) => [...current, person]); messageApi.success(person + ' added to ' + (activeGroup?.name || 'group')); }}>Add to {activeGroup?.name || 'group'}</Button>, <Popconfirm key="remove" title={'Remove ' + person + ' from saved people?'} onConfirm={() => setSavedPeople((current) => current.filter((name) => name !== person))}><Button type="text" danger icon={<DeleteOutlined />} aria-label={'Remove ' + person} /></Popconfirm>]}><List.Item.Meta avatar={<Avatar>{person.slice(0, 1).toUpperCase()}</Avatar>} title={person} /></List.Item>} /> : <Empty className="empty-panel" description="No saved people yet. Add names above to reuse them in any group." />}</section>;
 
   const renderProfile = () => <section className="page-panel profile-panel">{user ? <><div className="account-status"><Tag color="green" icon={<CheckCircleFilled />}>Signed in</Tag><Text>{user.email}</Text></div><Form form={profileForm} layout="vertical" onFinish={saveProfileChanges} className="profile-form"><Form.Item name="display_name" label="Display name"><Input placeholder="Your name" maxLength={80} /></Form.Item><Form.Item name="avatar_url" label="Profile image URL" rules={[{ validator: (_, value) => (!value || isHttpsUrl(value) ? Promise.resolve() : Promise.reject(new Error('Use an https:// image link'))) }]}><Input placeholder="https://…" maxLength={500} /></Form.Item><Button type="primary" htmlType="submit">Save profile</Button></Form><Divider /><Button danger icon={<LogoutOutlined />} onClick={signOut}>Sign out</Button></> : <><div className="auth-prompt"><Avatar size={58} icon={<UserOutlined />} /><Button type="primary" icon={<LoginOutlined />} onClick={() => { setAuthPurpose('account'); setAuthMode('signup'); setAuthModal(true); }}>Sign in or create account</Button></div><Tag icon={<CloudOutlined />} color={supabaseConfigured ? 'blue' : 'orange'}>{supabaseConfigured ? 'Cloud connection ready' : 'Cloud accounts are not configured'}</Tag></>}</section>;
 
