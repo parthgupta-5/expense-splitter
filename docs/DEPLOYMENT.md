@@ -18,7 +18,7 @@ git status           # .env must NOT be listed
 ## 2. Supabase
 
 1. New project → note the **Project URL** and **anon/publishable key** (Settings → API).
-2. SQL Editor → run `supabase/migrations/2026102201_expense_splitter_core.sql`.
+2. SQL Editor → run `supabase/migrations/2026102201_expense_splitter_core.sql`, then `supabase/migrations/2026102601_harden_groups.sql` (both are safe to re-run).
 3. Authentication → Providers → Email enabled. For a smooth demo you may turn off "Confirm email"; for real use keep it on.
 4. Authentication → URL Configuration: set **Site URL** to the Vercel URL (after step 3) and add it plus `http://localhost:5173` to **Redirect URLs**.
 

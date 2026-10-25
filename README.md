@@ -69,7 +69,7 @@ npm run build && npm run preview
 ### Supabase (optional, enables accounts + sync)
 
 1. Create a project at supabase.com.
-2. Run `supabase/migrations/2026102201_expense_splitter_core.sql` in the SQL Editor.
+2. In the SQL Editor run, in this order: `supabase/migrations/2026102201_expense_splitter_core.sql`, then `supabase/migrations/2026102601_harden_groups.sql` (locks `created_by`, makes `updated_at` server-controlled).
 3. Authentication → Providers: enable Email. Under URL Configuration set **Site URL** to your deployed URL and add `http://localhost:5173` to Redirect URLs.
 4. Copy the Project URL and anon/publishable key into `.env`.
 
