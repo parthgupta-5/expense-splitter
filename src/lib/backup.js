@@ -6,7 +6,8 @@ export const MAX_GROUPS = 100;
 
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isText = (v) => typeof v === 'string' && v.trim().length > 0;
-const money = (v) => (typeof v === 'number' || typeof v === 'string') && Number.isFinite(Number(v)) && Number(v) > 0 && Number(v) < 1e12;
+const money = (v) => (typeof v === 'number' || typeof v === 'string')
+  && Number.isFinite(Number(v)) && Number(v) > 0 && Number(v) < 1e12;
 const iso = (v) => (typeof v === 'string' && !Number.isNaN(Date.parse(v)) ? v : new Date().toISOString());
 const text = (v, max) => String(v).trim().slice(0, max);
 
@@ -100,10 +101,14 @@ export function sanitizeGroups(rawGroups) {
 
 /** Throws an Error with a friendly message when the file is not a usable backup. */
 export function sanitizeBackup(raw) {
-  if (!isObject(raw) || !Array.isArray(raw.groups)) throw new Error('This file does not contain a valid Expense Splitter backup.');
+  if (!isObject(raw) || !Array.isArray(raw.groups)) {
+    throw new Error('This file does not contain a valid Expense Splitter backup.');
+  }
   const { groups, skipped } = sanitizeGroups(raw.groups);
   if (!groups.length) throw new Error('No usable groups were found in this backup.');
-  const people = Array.isArray(raw.savedPeople) ? raw.savedPeople.filter(isText).map((n) => text(n, PERSON_NAME_MAX)) : [];
+  const people = Array.isArray(raw.savedPeople)
+    ? raw.savedPeople.filter(isText).map((n) => text(n, PERSON_NAME_MAX))
+    : [];
   const preferences = isObject(raw.preferences) ? raw.preferences : {};
   return { groups, savedPeople: [...new Set(people)], preferences, skipped };
 }

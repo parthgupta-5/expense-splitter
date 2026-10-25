@@ -26,7 +26,8 @@ export function mergeGroups({ local, cloud, meta = {}, userId, isNewAccount = fa
     if (!mine) { groups.push(remote); return; }
     if (time(mine.updatedAt) > time(remote.updatedAt)) { groups.push(mine); return; }
     const editedSinceSync = synced[mine.id] !== mine.updatedAt;
-    if (editedSinceSync && time(mine.updatedAt) < time(remote.updatedAt) && JSON.stringify(strip(mine)) !== JSON.stringify(strip(remote))) {
+    const contentDiffers = JSON.stringify(strip(mine)) !== JSON.stringify(strip(remote));
+    if (editedSinceSync && time(mine.updatedAt) < time(remote.updatedAt) && contentDiffers) {
       replacedLocal.push(mine.name);
     }
     groups.push(remote);

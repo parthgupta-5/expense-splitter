@@ -48,7 +48,10 @@ export function validateSplit(splitType, amount, people, values = {}) {
     const hundredths = people.reduce((total, p) => total + Math.round(num(values[p]) * 100), 0);
     if (hundredths !== 10000) return 'Percentages must add up to 100%';
   }
-  if (splitType === 'shares' && people.reduce((total, p) => total + num(values[p]), 0) <= 0) return 'Enter at least one share';
+  if (splitType === 'shares') {
+    const shares = people.reduce((total, p) => total + num(values[p]), 0);
+    if (shares <= 0) return 'Enter at least one share';
+  }
   return null;
 }
 

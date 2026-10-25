@@ -62,7 +62,10 @@ export async function saveCloudGroups(groups, userId) {
   }));
   outcomes.forEach((outcome, index) => {
     if (outcome.status === 'fulfilled') result.saved.push(outcome.value);
-    else result.failed.push({ id: candidates[index].id, name: candidates[index].name, message: outcome.reason?.message || 'Unknown error' });
+    else {
+      const { id, name } = candidates[index];
+      result.failed.push({ id, name, message: outcome.reason?.message || 'Unknown error' });
+    }
   });
   return result;
 }
