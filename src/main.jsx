@@ -26,6 +26,8 @@ const { Header, Content } = Layout;
 const { Title, Text } = Typography;
 const STATE_KEY = 'expenseSplitterStateV2';
 const THEME_KEY = 'expenseSplitterThemeV1';
+const LAST_USER_KEY = 'expenseSplitterLastUserV1';
+const SYNC_META_KEY = 'expenseSplitterSyncMetaV1';
 const CURRENCIES = [
   { value: 'INR', label: 'Indian Rupee (INR)' }, { value: 'USD', label: 'US Dollar (USD)' },
   { value: 'EUR', label: 'Euro (EUR)' }, { value: 'GBP', label: 'British Pound (GBP)' },
@@ -49,6 +51,14 @@ const legacyGroup = (saved) => ({
   savedSplits: Array.isArray(saved.savedSplits) ? saved.savedSplits : [],
   createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
 });
+
+const readSyncMeta = () => {
+  try { return JSON.parse(localStorage.getItem(SYNC_META_KEY) || '{}'); } catch { return {}; }
+};
+const writeSyncMeta = (meta) => {
+  try { localStorage.setItem(SYNC_META_KEY, JSON.stringify(meta)); } catch { /* storage unavailable */ }
+};
+const isNonEmptyGroup = (group) => (group.people?.length || 0) + (group.expenses?.length || 0) + (group.payments?.length || 0) > 0;
 
 function AppView() {
   const saved = useMemo(readSaved, []);
@@ -126,10 +136,18 @@ function AppView() {
     if (!supabase || !user) { setCloudReady(false); setProfile(null); return; }
     let cancelled = false;
     setCloudReady(false);
+    const lastUserId = localStorage.getItem(LAST_USER_KEY);
+    const differentUser = Boolean(lastUserId) && lastUserId !== user.id;
+    if (differentUser) {
+      // Another account used this device: never merge its local data into this account.
+      setSavedPeople([]); setPreferences({}); writeSyncMeta({});
+    }
     Promise.all([fetchCloudGroups(user.id), fetchProfile(user.id)]).then(([cloudGroups, cloudProfile]) => {
       if (cancelled) return;
+      localStorage.setItem(LAST_USER_KEY, user.id);
       setGroups((localGroups) => {
         const merged = [...cloudGroups];
+        if (differentUser) return merged.length ? merged : [legacyGroup({})];
         localGroups.forEach((local) => { if (!merged.some((item) => item.id === local.id)) merged.push(local); });
         return merged.length ? merged : [legacyGroup({})];
       });
@@ -148,7 +166,9 @@ function AppView() {
   useEffect(() => {
     if (!supabase || !user || !cloudReady) return undefined;
     const timer = window.setTimeout(() => {
-      saveCloudGroups(groups, user.id).catch((error) => messageApi.error('Cloud save failed: ' + error.message));
+      saveCloudGroups(groups, user.id).then(() => {
+        writeSyncMeta({ userId: user.id, groups: Object.fromEntries(groups.map((g) => [g.id, g.updatedAt])) });
+      }).catch((error) => messageApi.error('Cloud save failed: ' + error.message));
     }, 650);
     return () => window.clearTimeout(timer);
   }, [groups, user?.id, cloudReady]);
@@ -311,7 +331,32 @@ function AppView() {
       } catch (error) { messageApi.error('Profile save failed: ' + error.message); }
     } else messageApi.success('Profile saved on this device. Sign in to sync it.');
   };
-  const signOut = async () => { if (supabase) await supabase.auth.signOut(); setUser(null); setProfile(null); messageApi.success('Signed out'); };
+  const resetLocalState = () => {
+    const fresh = legacyGroup({});
+    setGroups([fresh]); setActiveGroupId(fresh.id); setSavedPeople([]); setPreferences({});
+    setSelectedSnapshot(null); setPage('dashboard');
+    localStorage.removeItem(STATE_KEY); localStorage.removeItem(LAST_USER_KEY); localStorage.removeItem(SYNC_META_KEY);
+  };
+  const finishSignOut = async () => {
+    try { if (supabase) await supabase.auth.signOut(); } catch (error) { messageApi.error('Could not sign out: ' + error.message); return; }
+    setUser(null); setProfile(null); setCloudReady(false); resetLocalState();
+    messageApi.success('Signed out. This device no longer holds your groups.');
+  };
+  const signOut = () => {
+    const meta = readSyncMeta();
+    const unsynced = groups.filter((group) => isNonEmptyGroup(group) && meta.userId === user?.id && meta.groups?.[group.id] !== group.updatedAt);
+    const neverSynced = groups.filter((group) => isNonEmptyGroup(group) && meta.userId !== user?.id);
+    if (!unsynced.length && !neverSynced.length) { finishSignOut(); return; }
+    Modal.confirm({
+      title: 'Some changes are not synced yet',
+      content: 'Signing out clears groups from this device. Download a backup first if you want to keep: '
+        + [...unsynced, ...neverSynced].map((group) => group.name).join(', ') + '.',
+      okText: 'Sign out anyway', okButtonProps: { danger: true },
+      cancelText: 'Cancel',
+      footer: (_, { OkBtn, CancelBtn }) => <><Button icon={<DownloadOutlined />} onClick={exportBackup}>Download backup</Button><CancelBtn /><OkBtn /></>,
+      onOk: finishSignOut,
+    });
+  };
   useEffect(() => {
     if (user && cloudReady) saveProfile(user.id, { display_name: profile?.display_name || user.user_metadata?.display_name || '', avatar_url: profile?.avatar_url || '', currency_code: currencyCode, preferences, saved_people: savedPeople, updated_at: new Date().toISOString() })
       .catch((error) => messageApi.error('Profile sync failed: ' + error.message));
