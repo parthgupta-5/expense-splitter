@@ -22,6 +22,7 @@ import {
 import { computeBalances, computeSettlements, computeSplit, validateSplit } from './lib/splits';
 import ErrorBoundary from './ErrorBoundary';
 import { toCsv } from './lib/csv';
+import { describeRejected, parseNames, removalStatus } from './lib/people';
 import { DESCRIPTION_MAX, GROUP_NAME_MAX, NOTE_MAX } from './lib/limits';
 
 const { Header, Content } = Layout;
@@ -195,17 +196,24 @@ function AppView() {
   ];
 
   const addPeople = (raw = nameValue) => {
-    const additions = raw.split(',').map((name) => name.trim()).filter(Boolean);
-    if (!additions.length) return;
-    setPeople((current) => {
-      const next = [...current];
-      additions.forEach((name) => { if (!next.some((item) => item.toLowerCase() === name.toLowerCase())) next.push(name); });
-      return next;
-    });
-    setSavedPeople((current) => [...new Set([...current, ...additions])]);
-    setNameValue(''); messageApi.success('People added');
+    const parsed = parseNames(raw, people);
+    const rejected = describeRejected(parsed);
+    if (rejected) messageApi.error('Not added, ' + rejected);
+    if (!parsed.valid.length) { if (!rejected && raw.trim()) messageApi.warning('Enter a name to add'); return; }
+    setPeople((current) => [...current, ...parsed.valid]);
+    setSavedPeople((current) => [...current, ...parseNames(parsed.valid.join(','), current).valid]);
+    setNameValue(''); messageApi.success(parsed.valid.length === 1 ? parsed.valid[0] + ' added' : parsed.valid.length + ' people added');
   };
-  const removePerson = (name) => { setPeople((current) => current.filter((person) => person !== name)); messageApi.info(name + ' removed from this group'); };
+  const removePerson = (name) => {
+    const status = removalStatus(name, balances, expenses, payments);
+    if (status === 'blocked') {
+      messageApi.warning(name + ' still owes or is owed money in this group. Settle up (record a payment) before removing them.');
+      return;
+    }
+    const remove = () => { setPeople((current) => current.filter((person) => person !== name)); messageApi.info(name + ' removed from this group'); };
+    if (status === 'free') { remove(); return; }
+    Modal.confirm({ title: 'Remove ' + name + '?', content: 'They are settled up. Their past expenses and payments stay in the group history.', okText: 'Remove', onOk: remove });
+  };
   const getSplitDetails = (amount) => computeSplit(splitType, amount, participants, splitValues);
   const resetExpense = () => { expenseForm.resetFields(); setSplitType('equal'); setSplitValues({}); setParticipantSel(null); setEditingIndex(null); };
   const submitExpense = (values) => {
@@ -426,7 +434,7 @@ function AppView() {
       <Col xs={8}><Card className="stat-card"><Statistic title="People" value={people.length} /></Card></Col>
       <Col xs={8}><Card className="stat-card"><Statistic title="To settle" value={settlements.length} /></Card></Col>
     </Row>}
-    <section className="section-card people-card"><div className="section-heading"><div><Title level={4}>People in {activeGroup?.name}</Title></div><Tag>{people.length} {people.length === 1 ? 'person' : 'people'}</Tag></div><Space.Compact className="add-person"><Input value={nameValue} onChange={(event) => setNameValue(event.target.value)} onPressEnter={() => addPeople()} placeholder="Add a name or several names separated by commas" aria-label="Add participant name" /><Button type="primary" icon={<PlusOutlined />} onClick={() => addPeople()}>Add people</Button></Space.Compact><div className="people-list">{people.map((name, index) => <Tag key={name} closable onClose={(event) => { event.preventDefault(); removePerson(name); }} color={['blue', 'purple', 'cyan', 'gold', 'green'][index % 5]}>{name}</Tag>)}</div></section>
+    <section className="section-card people-card"><div className="section-heading"><div><Title level={4}>People in {activeGroup?.name}</Title></div><Tag>{people.length} {people.length === 1 ? 'person' : 'people'}</Tag></div><Space.Compact className="add-person"><Input maxLength={400} value={nameValue} onChange={(event) => setNameValue(event.target.value)} onPressEnter={() => addPeople()} placeholder="Add a name or several names separated by commas" aria-label="Add participant name" /><Button type="primary" icon={<PlusOutlined />} onClick={() => addPeople()}>Add people</Button></Space.Compact><div className="people-list">{people.map((name, index) => <Tag key={name} closable onClose={(event) => { event.preventDefault(); removePerson(name); }} color={['blue', 'purple', 'cyan', 'gold', 'green'][index % 5]}>{name}</Tag>)}</div></section>
     {people.length > 0 ? <div className="feature-content">
       <section className="section-card" id="add-expense"><div className="section-heading"><div><Text className="eyebrow">GROUP WORKSPACE</Text><Title level={3}>{editingIndex === null ? 'Add an expense' : 'Edit expense'}</Title></div><div className="step-pill">01 <span>·</span> ACTIVITY</div></div>
         <Form form={expenseForm} layout="vertical" onFinish={submitExpense} className="expense-form"><Row gutter={16}>
@@ -467,9 +475,11 @@ function AppView() {
     /> : <Empty className="empty-panel" description={false} />}</section>;
 
   const addSavedPeople = () => {
-    const additions = savedPersonValue.split(',').map((item) => item.trim()).filter(Boolean);
-    if (!additions.length) return;
-    setSavedPeople((current) => [...new Set([...current, ...additions])]); setSavedPersonValue(''); messageApi.success('People saved to your list');
+    const parsed = parseNames(savedPersonValue, savedPeople);
+    const rejected = describeRejected(parsed);
+    if (rejected) messageApi.error('Not saved, ' + rejected);
+    if (!parsed.valid.length) return;
+    setSavedPeople((current) => [...current, ...parsed.valid]); setSavedPersonValue(''); messageApi.success('People saved to your list');
   };
   const renderPeople = () => <section className="page-panel"><Space.Compact className="add-person library-add"><Input value={savedPersonValue} onChange={(event) => setSavedPersonValue(event.target.value)} onPressEnter={addSavedPeople} placeholder="Add one or more names" aria-label="Save people" /><Button type="primary" icon={<PlusOutlined />} onClick={addSavedPeople}>Save people</Button></Space.Compact>{savedPeople.length ? <List className="saved-people-list" dataSource={savedPeople} renderItem={(person) => <List.Item actions={[<Button key="add" type="link" onClick={() => { if (people.some((name) => name.toLowerCase() === person.toLowerCase())) { messageApi.info(person + ' is already in this group'); return; } setPeople((current) => [...current, person]); messageApi.success(person + ' added to ' + (activeGroup?.name || 'group')); }}>Add to {activeGroup?.name || 'group'}</Button>, <Popconfirm key="remove" title={'Remove ' + person + ' from saved people?'} onConfirm={() => setSavedPeople((current) => current.filter((name) => name !== person))}><Button type="text" danger icon={<DeleteOutlined />} aria-label={'Remove ' + person} /></Popconfirm>]}><List.Item.Meta avatar={<Avatar>{person.slice(0, 1).toUpperCase()}</Avatar>} title={person} /></List.Item>} /> : <Empty className="empty-panel" description={false} />}</section>;
 
