@@ -1,5 +1,7 @@
 # Deployment guide (Vercel + Supabase)
 
+The short, step-by-step version for the owner is [HANDOFF.md](HANDOFF.md). This page adds the reasoning and troubleshooting.
+
 Adapted from the course deployment guide for this stack. Expense Splitter has **no custom backend**, so the Render/Express/CORS/cookie steps do not apply: the Vite SPA calls Supabase directly, and Supabase handles auth tokens and CORS.
 
 | Part | Service |
@@ -11,8 +13,8 @@ Adapted from the course deployment guide for this stack. Expense Splitter has **
 ## 1. Pre-flight
 
 ```bash
-npm ci && npm test && npm run build
-git status           # .env must NOT be listed
+npm ci && npm run preflight   # tests, build, secret scan, placeholder check
+git status                    # .env must NOT be listed
 ```
 
 ## 2. Supabase
@@ -31,7 +33,7 @@ git status           # .env must NOT be listed
 3. Deploy. Vite bakes `VITE_*` values at build time, so **redeploy after changing them**.
 4. Copy the deployed URL back into Supabase Site URL / Redirect URLs.
 
-`vercel.json` rewrites all paths to `index.html` (refresh-safe) and sets security headers and immutable caching for hashed assets.
+`vercel.json` rewrites all paths to `index.html` (refresh-safe) and sets security headers (including a Content-Security-Policy that allows only this site, Google Fonts and `*.supabase.co`) and immutable caching for hashed assets.
 
 ## 4. Verify (in an incognito window)
 
@@ -51,6 +53,7 @@ git status           # .env must NOT be listed
 | `permission denied` / `new row violates row-level security` | Migration not run, or not signed in |
 | `Invalid API key` | Wrong key, or the key was pasted with spaces |
 | 404 on refresh | `vercel.json` rewrite missing |
+| Blank page or blocked requests, console mentions Content-Security-Policy | A new external domain was added: allow it in the `Content-Security-Policy` header in `vercel.json` |
 
 ## 6. Updating
 
