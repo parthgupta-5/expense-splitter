@@ -19,6 +19,8 @@ import {
   fetchCloudGroups, fetchProfile, removeCloudGroup, saveCloudGroups, saveProfile,
   supabase, supabaseConfigured,
 } from './supabase';
+import { computeBalances, computeSettlements, computeSplit, validateSplit } from './lib/splits';
+import ErrorBoundary from './ErrorBoundary';
 
 const { Header, Content } = Layout;
 const { Title, Text } = Typography;
@@ -151,36 +153,8 @@ function AppView() {
     return () => window.clearTimeout(timer);
   }, [groups, user?.id, cloudReady]);
 
-  const balances = useMemo(() => {
-    const result = Object.fromEntries(people.map((name) => [name, { paid: 0, share: 0, balance: 0 }]));
-    expenses.forEach(({ payer, amount, splitDetails = {} }) => {
-      if (!result[payer]) result[payer] = { paid: 0, share: 0, balance: 0 };
-      result[payer].paid += Number(amount) || 0; result[payer].balance += Number(amount) || 0;
-      Object.entries(splitDetails).forEach(([name, share]) => {
-        if (!result[name]) result[name] = { paid: 0, share: 0, balance: 0 };
-        result[name].share += Number(share) || 0; result[name].balance -= Number(share) || 0;
-      });
-    });
-    payments.forEach(({ payer, payee, amount }) => {
-      if (!result[payer]) result[payer] = { paid: 0, share: 0, balance: 0 };
-      if (!result[payee]) result[payee] = { paid: 0, share: 0, balance: 0 };
-      result[payer].paid += Number(amount) || 0; result[payer].balance += Number(amount) || 0; result[payee].balance -= Number(amount) || 0;
-    });
-    return result;
-  }, [people, expenses, payments]);
-  const settlements = useMemo(() => {
-    const creditors = Object.entries(balances).filter(([, value]) => value.balance > 0.01).map(([name, value]) => ({ name, amount: value.balance })).sort((a, b) => b.amount - a.amount);
-    const debtors = Object.entries(balances).filter(([, value]) => value.balance < -0.01).map(([name, value]) => ({ name, amount: -value.balance })).sort((a, b) => b.amount - a.amount);
-    const result = [];
-    while (creditors.length && debtors.length) {
-      const amount = Math.min(creditors[0].amount, debtors[0].amount);
-      result.push({ payer: debtors[0].name, payee: creditors[0].name, amount });
-      creditors[0].amount -= amount; debtors[0].amount -= amount;
-      if (creditors[0].amount <= 0.01) creditors.shift();
-      if (debtors[0].amount <= 0.01) debtors.shift();
-    }
-    return result;
-  }, [balances]);
+  const balances = useMemo(() => computeBalances(people, expenses, payments), [people, expenses, payments]);
+  const settlements = useMemo(() => computeSettlements(balances), [balances]);
   const total = expenses.reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0);
   const participantOptions = people.map((person) => ({ label: person, value: person }));
   const splitTypes = [
@@ -200,24 +174,12 @@ function AppView() {
     setNameValue(''); messageApi.success('People added');
   };
   const removePerson = (name) => { setPeople((current) => current.filter((person) => person !== name)); messageApi.info(name + ' removed from this group'); };
-  const getSplitDetails = (amount) => {
-    if (splitType === 'equal') {
-      const each = Math.floor((amount / Math.max(people.length, 1)) * 100) / 100;
-      const split = Object.fromEntries(people.map((person) => [person, each]));
-      if (people.length) split[people[0]] = Math.round((split[people[0]] + amount - each * people.length) * 100) / 100;
-      return split;
-    }
-    if (splitType === 'unequal') return Object.fromEntries(people.map((person) => [person, Number(splitValues[person]) || 0]));
-    if (splitType === 'percentages') return Object.fromEntries(people.map((person) => [person, (amount * (Number(splitValues[person]) || 0)) / 100]));
-    const totalShares = people.reduce((sum, person) => sum + (Number(splitValues[person]) || 0), 0);
-    return Object.fromEntries(people.map((person) => [person, totalShares ? (amount * (Number(splitValues[person]) || 0)) / totalShares : 0]));
-  };
+  const getSplitDetails = (amount) => computeSplit(splitType, amount, people, splitValues);
   const resetExpense = () => { expenseForm.resetFields(); setSplitType('equal'); setSplitValues({}); setEditingIndex(null); };
   const submitExpense = (values) => {
     const amount = Number(values.amount); const splitDetails = getSplitDetails(amount);
-    if (splitType === 'unequal' && Math.abs(Object.values(splitDetails).reduce((a, b) => a + b, 0) - amount) > 0.01) { messageApi.error('Split amounts must add up to the expense total'); return; }
-    if (splitType === 'percentages' && Math.abs(people.reduce((sum, person) => sum + (Number(splitValues[person]) || 0), 0) - 100) > 0.01) { messageApi.error('Percentages must add up to 100%'); return; }
-    if (splitType === 'shares' && people.reduce((sum, person) => sum + (Number(splitValues[person]) || 0), 0) <= 0) { messageApi.error('Enter at least one share'); return; }
+    const problem = validateSplit(splitType, amount, people, splitValues);
+    if (problem) { messageApi.error(problem); return; }
     const previous = editingIndex === null ? null : expenses[editingIndex];
     const expense = { id: previous?.id || makeId(), description: values.description.trim(), payer: values.payer, amount, splitType, splitDetails, createdAt: previous?.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString(), category: values.category || 'Other', note: values.note || '' };
     setExpenses((current) => editingIndex === null ? [expense, ...current] : current.map((item, index) => index === editingIndex ? expense : item));
@@ -472,4 +434,4 @@ function AppView() {
   </AntApp></ConfigProvider>;
 }
 
-createRoot(document.getElementById('root')).render(<AppView />);
+createRoot(document.getElementById('root')).render(<ErrorBoundary><AppView /></ErrorBoundary>);
