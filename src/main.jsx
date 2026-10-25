@@ -19,7 +19,7 @@ import {
   fetchCloudGroups, fetchProfile, removeCloudGroup, saveCloudGroups, saveProfile,
   supabase, supabaseConfigured,
 } from './supabase';
-import { computeBalances, computeSettlements, computeSplit, validateSplit } from './lib/splits';
+import { computeBalances, computeSettlements, computeSplit, paymentExceedsOwed, validateSplit } from './lib/splits';
 import ErrorBoundary from './ErrorBoundary';
 import { toCsv } from './lib/csv';
 import { mergeGroups } from './lib/sync';
@@ -253,8 +253,16 @@ function AppView() {
   };
   const recordPayment = (values) => {
     if (values.payer === values.payee) { messageApi.error('Choose two different people'); return; }
-    setPayments((current) => [{ ...values, id: makeId(), amount: Number(values.amount), createdAt: new Date().toISOString() }, ...current]);
-    paymentForm.resetFields(); messageApi.success('Payment recorded');
+    const save = () => {
+      setPayments((current) => [{ ...values, id: makeId(), amount: Number(values.amount), createdAt: new Date().toISOString() }, ...current]);
+      paymentForm.resetFields(); messageApi.success('Payment recorded');
+    };
+    if (!paymentExceedsOwed(balances, values.payer, values.payee, Number(values.amount))) { save(); return; }
+    Modal.confirm({
+      title: 'This is more than the current balance',
+      content: values.payer + ' does not currently owe ' + values.payee + ' this much. Recording it will flip the balance. Record anyway?',
+      okText: 'Record anyway', onOk: save,
+    });
   };
   const exportCsv = () => {
     const rows = [['Group', 'Date', 'Category', 'Description', 'Paid by', 'Total', 'Split details']];

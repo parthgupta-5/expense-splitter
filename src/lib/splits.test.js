@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allocateCents, computeBalances, computeSettlements, computeSplit, toCents, validateSplit } from './splits';
+import { allocateCents, computeBalances, computeSettlements, computeSplit, paymentExceedsOwed, toCents, validateSplit } from './splits';
 
 const people = ['Asha', 'Ben', 'Chitra'];
 const sum = (obj) => Math.round(Object.values(obj).reduce((a, b) => a + b, 0) * 100) / 100;
@@ -124,5 +124,17 @@ describe('choosing participants', () => {
   it('custom amounts ignore people who are not taking part and need at least one person', () => {
     expect(validateSplit('unequal', 50, ['Asha', 'Ben'], { Asha: 20, Ben: 30, Chitra: 100 })).toBeNull();
     expect(validateSplit('equal', 50, [])).toMatch(/at least one person/);
+  });
+});
+
+describe('paymentExceedsOwed', () => {
+  const balances = { Asha: { balance: 100 }, Ben: { balance: -60 }, Chitra: { balance: -40 } };
+  it('flags payments above what is owed and allows exact or smaller ones', () => {
+    expect(paymentExceedsOwed(balances, 'Ben', 'Asha', 60)).toBe(false);
+    expect(paymentExceedsOwed(balances, 'Ben', 'Asha', 60.01)).toBe(true);
+    expect(paymentExceedsOwed(balances, 'Chitra', 'Asha', 10)).toBe(false);
+  });
+  it('flags a payment from someone who owes nothing', () => {
+    expect(paymentExceedsOwed(balances, 'Asha', 'Ben', 5)).toBe(true);
   });
 });

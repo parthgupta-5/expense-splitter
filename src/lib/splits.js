@@ -95,3 +95,10 @@ export function computeSettlements(balances) {
   }
   return result;
 }
+
+/** True when `amount` is more than the payer currently owes / the payee is owed, so it would flip a balance. */
+export function paymentExceedsOwed(balances, payer, payee, amount) {
+  const owes = Math.max(0, -(balances[payer]?.balance ?? 0));
+  const owed = Math.max(0, balances[payee]?.balance ?? 0);
+  return toCents(amount) > toCents(Math.min(owes, owed));
+}
