@@ -30,22 +30,39 @@ export async function fetchCloudGroups(userId) {
   }));
 }
 
+export const GROUP_NAME_MAX = 80;
+
+const toRow = (group, userId) => ({
+  id: group.id,
+  name: String(group.name || '').trim().slice(0, GROUP_NAME_MAX),
+  created_by: userId,
+  data: {
+    people: group.people ?? [],
+    expenses: group.expenses ?? [],
+    payments: group.payments ?? [],
+    savedSplits: group.savedSplits ?? [],
+  },
+  updated_at: group.updatedAt || new Date().toISOString(),
+});
+
+/**
+ * Saves each group on its own so one rejected row cannot block the rest.
+ * Resolves to { saved: [{ id, cloudUpdatedAt }], failed: [{ id, name, message }] }.
+ */
 export async function saveCloudGroups(groups, userId) {
-  if (!supabase || !groups.length) return;
-  const rows = groups.map((group) => ({
-    id: group.id,
-    name: group.name,
-    created_by: userId,
-    data: {
-      people: group.people ?? [],
-      expenses: group.expenses ?? [],
-      payments: group.payments ?? [],
-      savedSplits: group.savedSplits ?? [],
-    },
-    updated_at: new Date().toISOString(),
+  const result = { saved: [], failed: [] };
+  if (!supabase) return result;
+  const candidates = groups.filter((group) => String(group.name || '').trim());
+  const outcomes = await Promise.allSettled(candidates.map(async (group) => {
+    const { data, error } = await supabase.from('groups').upsert(toRow(group, userId)).select('updated_at').single();
+    if (error) throw error;
+    return { id: group.id, cloudUpdatedAt: data?.updated_at };
   }));
-  const { error } = await supabase.from('groups').upsert(rows);
-  if (error) throw error;
+  outcomes.forEach((outcome, index) => {
+    if (outcome.status === 'fulfilled') result.saved.push(outcome.value);
+    else result.failed.push({ id: candidates[index].id, name: candidates[index].name, message: outcome.reason?.message || 'Unknown error' });
+  });
+  return result;
 }
 
 export async function removeCloudGroup(id) {

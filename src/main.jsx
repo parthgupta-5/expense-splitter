@@ -166,8 +166,15 @@ function AppView() {
   useEffect(() => {
     if (!supabase || !user || !cloudReady) return undefined;
     const timer = window.setTimeout(() => {
-      saveCloudGroups(groups, user.id).then(() => {
-        writeSyncMeta({ userId: user.id, groups: Object.fromEntries(groups.map((g) => [g.id, g.updatedAt])) });
+      const meta = readSyncMeta();
+      const known = meta.userId === user.id ? meta.groups || {} : {};
+      const changed = groups.filter((group) => known[group.id] !== group.updatedAt);
+      if (!changed.length) return;
+      saveCloudGroups(changed, user.id).then(({ saved, failed }) => {
+        const synced = { ...known };
+        saved.forEach(({ id }) => { synced[id] = groups.find((g) => g.id === id)?.updatedAt; });
+        writeSyncMeta({ userId: user.id, groups: synced });
+        if (failed.length) messageApi.error('Could not sync: ' + failed.map((item) => item.name || 'Untitled group').join(', ') + '. Your data is still saved on this device.');
       }).catch((error) => messageApi.error('Cloud save failed: ' + error.message));
     }, 650);
     return () => window.clearTimeout(timer);
