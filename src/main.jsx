@@ -21,6 +21,7 @@ import {
 } from './supabase';
 import { computeBalances, computeSettlements, computeSplit, validateSplit } from './lib/splits';
 import ErrorBoundary from './ErrorBoundary';
+import { toCsv } from './lib/csv';
 import { DESCRIPTION_MAX, GROUP_NAME_MAX, NOTE_MAX } from './lib/limits';
 
 const { Header, Content } = Layout;
@@ -230,11 +231,10 @@ function AppView() {
     paymentForm.resetFields(); messageApi.success('Payment recorded');
   };
   const exportCsv = () => {
-    const esc = (value) => '"' + String(value ?? '').replaceAll('"', '""') + '"';
     const rows = [['Group', 'Date', 'Category', 'Description', 'Paid by', 'Total', 'Split details']];
-    expenses.forEach((expense) => rows.push([activeGroup?.name, expense.createdAt || '', expense.category || '', expense.description, expense.payer, expense.amount, Object.entries(expense.splitDetails || {}).map(([name, amount]) => name + ': ' + formatMoney(amount)).join('; ')]));
+    expenses.forEach((expense) => rows.push([activeGroup?.name, expense.createdAt || '', expense.category || '', expense.description, expense.payer, Number(expense.amount) || 0, Object.entries(expense.splitDetails || {}).map(([name, amount]) => name + ': ' + formatMoney(amount)).join('; ')]));
     rows.push([], ['Suggested settlements'], ...settlements.map((item) => [item.payer, 'pays', item.payee, item.amount]));
-    const blob = new Blob([rows.map((row) => row.map(esc).join(',')).join('\n')], { type: 'text/csv;charset=utf-8' });
+    const blob = new Blob([toCsv(rows)], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob); const link = Object.assign(document.createElement('a'), { href: url, download: 'group-settlement.csv' }); link.click(); URL.revokeObjectURL(url);
   };
   const exportBackup = () => {
