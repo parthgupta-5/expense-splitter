@@ -17,3 +17,9 @@ dist/
 # Test output
 playwright-report/
 test-results/
+
+# Claude Code / Impeccable tooling: installed per machine
+.claude/
+.impeccable/*
+!.impeccable/surfaces/
+!.impeccable/surfaces/*.md

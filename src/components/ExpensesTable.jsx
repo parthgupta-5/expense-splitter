@@ -24,6 +24,7 @@ export default function ExpensesTable({ expenses, formatMoney, onEdit, onDelete 
       dataIndex: 'amount',
       key: 'amount',
       align: 'right',
+      className: 'cell-nowrap',
       render: (value) => <Text strong>{formatMoney(value)}</Text>,
     },
     {

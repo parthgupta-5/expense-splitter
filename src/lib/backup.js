@@ -4,7 +4,7 @@ import { DESCRIPTION_MAX, GROUP_NAME_MAX, NOTE_MAX, PERSON_NAME_MAX } from './li
 import { toCents } from './splits';
 
 export const MAX_BACKUP_BYTES = 2 * 1024 * 1024;
-export const MAX_GROUPS = 100;
+const MAX_GROUPS = 100;
 
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const isText = (v) => typeof v === 'string' && v.trim().length > 0;
