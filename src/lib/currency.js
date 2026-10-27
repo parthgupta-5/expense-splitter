@@ -1,4 +1,5 @@
-// Currency choice only changes the symbol and number format. There is no conversion.
+// Each group has one currency. It changes the symbol and number format only; there is no conversion.
+export const DEFAULT_CURRENCY = 'INR';
 export const CURRENCIES = [
   { value: 'INR', label: 'Indian Rupee (INR)' },
   { value: 'USD', label: 'US Dollar (USD)' },
@@ -8,6 +9,8 @@ export const CURRENCIES = [
   { value: 'SGD', label: 'Singapore Dollar (SGD)' },
 ];
 
+export const isCurrency = (code) => CURRENCIES.some((item) => item.value === code);
+
 const formatters = new Map();
 const formatterFor = (code) => {
   if (!formatters.has(code)) {
@@ -16,8 +19,10 @@ const formatterFor = (code) => {
   return formatters.get(code);
 };
 
-export const formatCurrency = (value, code = 'INR') => formatterFor(code).format(Number(value) || 0);
+export const formatCurrency = (value, code = DEFAULT_CURRENCY) => (
+  formatterFor(isCurrency(code) ? code : DEFAULT_CURRENCY).format(Number(value) || 0)
+);
 
-export const currencySymbol = (code = 'INR') => (
-  formatterFor(code).formatToParts(0).find((part) => part.type === 'currency')?.value || '₹'
+export const currencySymbol = (code = DEFAULT_CURRENCY) => (
+  formatterFor(isCurrency(code) ? code : DEFAULT_CURRENCY).formatToParts(0).find((part) => part.type === 'currency')?.value || '₹'
 );

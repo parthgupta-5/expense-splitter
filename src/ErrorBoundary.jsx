@@ -16,7 +16,7 @@ export default class ErrorBoundary extends React.Component {
         style={{ maxWidth: 480, margin: '15vh auto', padding: 24, fontFamily: 'system-ui, sans-serif' }}
       >
         <h1 style={{ fontSize: 22 }}>Something went wrong</h1>
-        <p>Your data is still saved on this device. Reload the page to continue.</p>
+        <p>Your data is safe (on this device, or in your account if you are signed in). Reload the page to continue.</p>
         <button
           type="button"
           onClick={() => window.location.reload()}
