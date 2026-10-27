@@ -110,6 +110,7 @@ Supabase Postgres
 | `payments` | Repayments between two different people, in cents |
 | `saved_splits` | Read-only snapshots, stored as JSON documents |
 | `activity_log` | Who did what, written only by triggers |
+| `profiles` | Each account's name, preferences and unique `@username`; readable and writable only by its owner. The username changes only through `set_username()` |
 
 ### Security model (enforced by Postgres, tested in `supabase/tests/database.test.js`)
 
@@ -172,11 +173,17 @@ Vite bakes `VITE_*` values in at build time, so redeploy after changing them.
    2. `supabase/migrations/2026102601_harden_groups.sql`
    3. `supabase/migrations/2026102701_normalize_and_share.sql`
    4. `supabase/migrations/2026102801_import_checks_split_total.sql`
+   5. `supabase/migrations/2026102901_profiles_usernames.sql`
 3. Project Settings → API: copy the **Project URL** and the **anon / publishable key**.
 4. Authentication → Providers: enable **Email**. For a smooth demo you may turn off "Confirm email" (Supabase's
    built-in email sender is heavily rate-limited); for real use keep it on.
 5. Authentication → URL Configuration: set **Site URL** to the Vercel URL and add `https://<your-app>.vercel.app/**`
    and `http://localhost:5173/**` to **Redirect URLs** (needed for email confirmation and password reset).
+
+**Adding usernames to an existing project:** run migration 5 *before* deploying the app version that uses it. It
+gives every existing account a provisional `user_xxxxxxxx` name, which the app asks its owner to replace at the next
+sign-in. The app already deployed keeps working against it. If it must be undone, run
+`supabase/rollbacks/2026102901_profiles_usernames.down.sql`; that keeps every username and never touches group data.
 
 **Upgrading an existing v1 project:** run migrations 3 and 4. It moves every group's old JSON data into the new
 tables inside one transaction, then drops the old column. Migration 4 makes group import enforce the same
@@ -221,7 +228,7 @@ tables inside one transaction, then drops the old column. Migration 4 makes grou
 | Database (PGlite) | The real migrations: RLS isolation between users, anonymous access denied, validation triggers, sharing rules, activity log, v1 data upgrade, SQL balances equal JS balances | `npm run test:db` |
 | Browser (Playwright) | Full guest flow in Chromium on desktop and a phone viewport, persistence after reload, per-group currency, every URL loads, no console errors, no sideways scrolling | `npm run test:e2e` |
 
-183 Vitest test cases (154 unit, hook, app and rollback-compatibility tests in `src`, 29 database tests) plus 5 Playwright scenarios, each run on a desktop and a phone viewport (10 browser runs). What is **not** automated: real email delivery and Supabase Realtime itself (checked by hand
+224 Vitest test cases (180 unit, hook, app and rollback-compatibility tests in `src`, 44 database tests) plus 5 Playwright scenarios, each run on a desktop and a phone viewport (10 browser runs). What is **not** automated: real email delivery and Supabase Realtime itself (checked by hand
 with the checklist above).
 
 ## Error handling

@@ -6,7 +6,7 @@ import {
   SunOutlined, TeamOutlined, UserOutlined, WalletOutlined,
 } from '@ant-design/icons';
 import { useApp } from '../state/AppContext';
-import { isHttpsUrl } from '../lib/url';
+import UserAvatar from './UserAvatar';
 import { readLastGroup } from '../lib/storage';
 
 const { Header } = Layout;
@@ -29,9 +29,6 @@ export default function TopBar() {
     { to: '/people', label: 'People', icon: <TeamOutlined />, count: savedPeople.length, active: pathname === '/people' },
     { to: '/settings', label: 'Settings', icon: <SettingOutlined />, active: pathname === '/settings' },
   ];
-  const avatarSrc = isHttpsUrl(profile?.avatar_url)
-    ? <img src={profile.avatar_url} alt="" referrerPolicy="no-referrer" />
-    : undefined;
 
   return (
     <Header className="topbar">
@@ -64,13 +61,16 @@ export default function TopBar() {
               aria-label="Toggle appearance"
             />
           </Tooltip>
+          {/* Signed in, account management lives in Settings (until the activity bell takes this spot). */}
           <Link
-            to="/profile"
+            to={auth.user ? '/settings#account' : '/profile'}
             className={'nav-link account-link' + (pathname === '/profile' ? ' is-active' : '')}
             aria-label={auth.user ? 'Account' : 'Sign in'}
           >
             <Badge dot={Boolean(auth.user)} color="#43a87a">
-              <Avatar size="small" src={avatarSrc} icon={<UserOutlined />} />
+              {auth.user
+                ? <UserAvatar size="small" name={profile?.display_name || auth.user.email} seed={auth.user.id} />
+                : <Avatar size="small" icon={<UserOutlined />} />}
             </Badge>
             <span className="account-label">{profile?.display_name || (auth.user ? 'Account' : 'Sign in')}</span>
           </Link>

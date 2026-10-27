@@ -194,3 +194,30 @@ body{background:var(--page)}
 /* Split method: Equal carries a quiet "default" note, in the list and once chosen. */
 .split-type-label{display:inline-flex;align-items:baseline;gap:6px}
 .split-type-default.ant-typography{font-size:11px;font-weight:500}
+
+/* Account (first in Settings when signed in) and generated monochrome avatars. */
+:root .user-avatar{color:var(--ink);font-weight:700}
+:root .user-avatar-tone-0{background:color-mix(in srgb,var(--ink) 10%,var(--surface))}
+:root .user-avatar-tone-1{background:color-mix(in srgb,var(--ink) 18%,var(--surface))}
+:root .user-avatar-tone-2{background:color-mix(in srgb,var(--ink) 26%,var(--surface))}
+:root .user-avatar-tone-3{background:color-mix(in srgb,var(--ink) 34%,var(--surface))}
+.settings-panel .account-card .ant-card-body{display:block;padding:24px}
+.account-header{display:flex;align-items:center;gap:16px;margin-bottom:18px}
+.account-identity{display:flex;flex-direction:column;gap:2px;min-width:0}
+.account-title.ant-typography{margin:0;font:700 22px/1.25 'Manrope',sans-serif;color:var(--ink);overflow-wrap:anywhere}
+.account-username{color:var(--muted);font-weight:600}
+.account-details{display:grid;gap:12px;margin:0 0 20px;padding:16px 0;border-block:1px solid var(--line)}
+.account-details>div{display:grid;grid-template-columns:110px minmax(0,1fr);gap:12px;align-items:center}
+.account-details dt{color:var(--muted);font-size:13px;font-weight:600}
+.account-details dd{margin:0;display:flex;flex-wrap:wrap;align-items:center;gap:8px;overflow-wrap:anywhere}
+.account-status .ant-tag{margin:0}
+.account-note{font-size:12px}
+.account-name-form{max-width:420px}
+.account-actions,.username-actions{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px}
+.username-availability{display:block;min-height:20px}
+.username-cooldown{padding:10px 12px;border-radius:10px;background:var(--soft)}
+@media(max-width:700px){
+  .settings-panel .account-card .ant-card-body{padding:16px}
+  .account-details>div{grid-template-columns:1fr;gap:4px}
+  .account-actions .ant-btn,.username-actions .ant-btn{flex:1 1 100%}
+}

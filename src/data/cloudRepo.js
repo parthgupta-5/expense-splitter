@@ -101,8 +101,27 @@ export async function fetchProfile(userId) {
   return check(await supabase.from('profiles').select('*').eq('id', userId).maybeSingle());
 }
 
+/** Updates the caller's own profile row (created at sign-up). Username columns cannot be written this way. */
 export async function saveProfile(userId, profile) {
-  check(await supabase.from('profiles').upsert({ id: userId, ...profile }));
+  const rows = check(await supabase.from('profiles').update(profile).eq('id', userId).select('id'));
+  if (!rows?.length) throw new Error('Your profile was not found. Sign out and sign in again.');
+}
+
+/** 'available' | 'yours' | 'taken' | 'invalid' | 'reserved'. */
+export async function checkUsername(name) {
+  return check(await supabase.rpc('check_username', { candidate: name }));
+}
+
+/** An available username based on the display name, or null. */
+export async function suggestUsername() {
+  return check(await supabase.rpc('suggest_username'));
+}
+
+/** Sets the caller's username. Resolves to { username, username_confirmed_at, username_changed_at }. */
+export async function setUsername(name) {
+  const result = check(await supabase.rpc('set_username', { new_username: name }));
+  if (result?.error) throw new Error(result.error);
+  return result;
 }
 
 /**

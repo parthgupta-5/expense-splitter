@@ -41,7 +41,8 @@ describe('migrations', () => {
       "select table_name from information_schema.tables where table_schema = 'public' order by 1",
     )).rows.map((row) => row.table_name);
     expect(tables).toEqual([
-      'activity_log', 'expenses', 'group_members', 'group_people', 'groups', 'payments', 'profiles', 'saved_splits',
+      'activity_log', 'expenses', 'group_members', 'group_people', 'groups', 'payments', 'profiles', 'rate_limits',
+      'released_usernames', 'reserved_usernames', 'saved_splits',
     ]);
   });
 

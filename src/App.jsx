@@ -8,12 +8,14 @@ import {
 import { useApp } from './state/AppContext';
 import TopBar from './components/TopBar';
 import { readLastGroup } from './lib/storage';
+import { needsUsername } from './lib/username';
 
 // Pages and dialogs load on demand, so the first download only contains what the current screen needs.
 const GroupPage = lazy(() => import('./pages/GroupPage'));
 const AuthModal = lazy(() => import('./components/AuthModal'));
 const GroupModal = lazy(() => import('./components/GroupModal'));
 const ImportGuestModal = lazy(() => import('./components/ImportGuestModal'));
+const UsernameDialog = lazy(() => import('./components/UsernameDialog'));
 const GroupsPage = lazy(() => import('./pages/GroupsPage'));
 const HistoryPage = lazy(() => import('./pages/HistoryPage'));
 const PeoplePage = lazy(() => import('./pages/PeoplePage'));
@@ -57,6 +59,10 @@ export default function App() {
   } = useApp();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  // An account still on its provisional user_ name must choose a username before anything else (except finishing a
+  // password reset).
+  const chooseUsername = workspace.mode === 'cloud' && workspace.status === 'ready' && !auth.recovering
+    && needsUsername(workspace.profile);
 
   // The password-reset email link signs the user in; send them to the page where they choose a new password.
   useEffect(() => {
@@ -104,7 +110,8 @@ export default function App() {
       <Suspense fallback={null}>
         {authDialog.open && <AuthModal />}
         {groupDialogOpen && <GroupModal />}
-        {workspace.guestToImport.length > 0 && <ImportGuestModal />}
+        {chooseUsername && <UsernameDialog open required />}
+        {workspace.guestToImport.length > 0 && !chooseUsername && <ImportGuestModal />}
       </Suspense>
     </Layout>
   );

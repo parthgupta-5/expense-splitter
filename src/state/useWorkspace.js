@@ -64,7 +64,6 @@ export function useWorkspace({ user, authReady, notify }) {
         saved_people: savedPeople,
         currency_code: preferences.currency || DEFAULT_CURRENCY,
         preferences,
-        updated_at: new Date().toISOString(),
       })
         .then(() => { lastSavedProfile.current = key; })
         .catch((error) => notifyRef.current.error('Could not save your settings: ' + friendlyError(error)));
@@ -241,6 +240,12 @@ export function useWorkspace({ user, authReady, notify }) {
       setPreferences: (patch) => dispatch({ type: 'setPreferences', preferences: patch }),
       setProfile: (profile) => dispatch({ type: 'setProfile', profile }),
       saveProfile: (profile) => repo.saveProfile(stateRef.current.userId, profile),
+      /** Sets the username on the server (which enforces every rule), then shows it. Throws the server's reason. */
+      setUsername: async (name) => {
+        const fields = await repo.setUsername(name);
+        dispatch({ type: 'setProfile', profile: { ...stateRef.current.profile, ...fields } });
+        return fields;
+      },
       importGroups,
       /** Moves the groups that were made while signed out into the account, then removes them from the device. */
       importGuestGroups: async (groups) => {
