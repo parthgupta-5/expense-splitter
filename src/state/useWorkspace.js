@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
 import * as repo from '../data/cloudRepo';
+import { supabaseUrl } from '../supabase';
+import { ownAvatarPath } from '../lib/avatarUrl';
 import { DEFAULT_CURRENCY } from '../lib/currency';
 import { friendlyError } from '../lib/errors';
 import {
@@ -260,6 +262,33 @@ export function useWorkspace({ user, authReady, notify }) {
         const fields = await repo.setUsername(name);
         dispatch({ type: 'setProfile', profile: { ...stateRef.current.profile, ...fields } });
         return fields;
+      },
+      /**
+       * Makes an already re-encoded JPEG the profile photo. The new photo is uploaded as a new object first; if the
+       * profile cannot be updated it is deleted again and the current photo stays. Only after the switch is the
+       * previous photo deleted, and only when it is provably this user's own object in this project.
+       */
+      setAvatar: async (blob) => {
+        const { userId, profile } = stateRef.current;
+        const { path, url } = await repo.uploadAvatar(userId, blob);
+        try {
+          await repo.saveProfile(userId, { avatar_url: url });
+        } catch (error) {
+          repo.removeAvatarObject(path).catch(() => {});
+          throw error;
+        }
+        dispatch({ type: 'setProfile', profile: { ...stateRef.current.profile, avatar_url: url } });
+        const previous = ownAvatarPath(profile?.avatar_url, userId, supabaseUrl);
+        if (previous && previous !== path) repo.removeAvatarObject(previous).catch(() => {});
+        return url;
+      },
+      /** Goes back to the generated initial, then deletes the user's own previous photo object (if it was one). */
+      removeAvatar: async () => {
+        const { userId, profile } = stateRef.current;
+        await repo.saveProfile(userId, { avatar_url: null });
+        dispatch({ type: 'setProfile', profile: { ...stateRef.current.profile, avatar_url: null } });
+        const previous = ownAvatarPath(profile?.avatar_url, userId, supabaseUrl);
+        if (previous) repo.removeAvatarObject(previous).catch(() => {});
       },
       importGroups,
       /** Moves the groups that were made while signed out into the account, then removes them from the device. */

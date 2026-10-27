@@ -12,7 +12,7 @@ import { MemoryRouter } from 'react-router';
 import App from './App';
 import { AppProvider } from './state/AppContext';
 
-vi.mock('./supabase', () => ({ supabase: null, supabaseConfigured: false, normalizeSupabaseUrl: () => '' }));
+vi.mock('./supabase', () => ({ supabase: null, supabaseConfigured: false, normalizeSupabaseUrl: () => '', supabaseUrl: '' }));
 
 beforeAll(() => {
   window.matchMedia = window.matchMedia || ((query) => ({
@@ -87,6 +87,9 @@ describe('App (guest mode)', () => {
     expect(screen.getByRole('button', { name: /download backup/i })).toBeTruthy();
     expect(document.querySelector('.account-card')).toBeNull();
     expect(screen.queryByText('Choose your username')).toBeNull();
+    // Guests have no profile photo to manage.
+    expect(screen.queryByRole('button', { name: /upload photo/i })).toBeNull();
+    expect(screen.queryByLabelText('Profile photo file')).toBeNull();
   });
 
   it('explains when a group link no longer works', async () => {

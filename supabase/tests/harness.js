@@ -31,6 +31,29 @@ const SUPABASE_STUB = `
   alter default privileges in schema public grant all on tables to anon, authenticated;
   alter default privileges in schema public grant all on functions to anon, authenticated;
   create publication supabase_realtime;
+
+  -- Supabase Storage keeps its files' metadata in these tables, with Row Level Security on storage.objects and
+  -- table privileges for both roles; the Storage API runs each request as the caller's role.
+  create schema storage;
+  create table storage.buckets (
+    id text primary key,
+    name text not null unique,
+    public boolean not null default false,
+    file_size_limit bigint,
+    allowed_mime_types text[]
+  );
+  create table storage.objects (
+    id uuid primary key default gen_random_uuid(),
+    bucket_id text references storage.buckets (id),
+    name text not null,
+    metadata jsonb,
+    created_at timestamptz not null default now(),
+    unique (bucket_id, name)
+  );
+  alter table storage.objects enable row level security;
+  grant usage on schema storage to anon, authenticated;
+  grant select, insert, update, delete on storage.objects to anon, authenticated;
+  grant select on storage.buckets to anon, authenticated;
 `;
 
 /** Creates a database with the Supabase stub. Pass `upTo` to stop before a migration (for data-migration tests). */

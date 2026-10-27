@@ -110,7 +110,7 @@ Supabase Postgres
 | `payments` | Repayments between two different people, in cents |
 | `saved_splits` | Read-only snapshots, stored as JSON documents |
 | `activity_log` | Who did what, written only by triggers |
-| `profiles` | Each account's name, preferences and unique `@username`; readable and writable only by its owner. The username changes only through `set_username()` |
+| `profiles` | Each account's name, preferences and unique `@username`; readable and writable only by its owner. The username changes only through `set_username()`; `avatar_url` may only point at the owner's own photo |
 
 ### Security model (enforced by Postgres, tested in `supabase/tests/database.test.js`)
 
@@ -174,6 +174,7 @@ Vite bakes `VITE_*` values in at build time, so redeploy after changing them.
    3. `supabase/migrations/2026102701_normalize_and_share.sql`
    4. `supabase/migrations/2026102801_import_checks_split_total.sql`
    5. `supabase/migrations/2026102901_profiles_usernames.sql`
+   6. `supabase/migrations/2026103001_avatar_storage.sql`
 3. Project Settings → API: copy the **Project URL** and the **anon / publishable key**.
 4. Authentication → Sign In / Providers → Email: enable **Email**, turn **Confirm email** on (User Signups), set
    **Email OTP length** to 6, **Minimum password length** to 12 and **Password requirements** to lowercase,
@@ -190,6 +191,13 @@ Vite bakes `VITE_*` values in at build time, so redeploy after changing them.
 gives every existing account a provisional `user_xxxxxxxx` name, which the app asks its owner to replace at the next
 sign-in. The app already deployed keeps working against it. If it must be undone, run
 `supabase/rollbacks/2026102901_profiles_usernames.down.sql`; that keeps every username and never touches group data.
+
+**Adding profile photos:** run migration 6 before deploying the app version that uses it. It creates the public
+`avatars` Storage bucket (JPEG only, 1 MB per file) and its policies: each photo is stored at
+`<user id>/<random uuid>.jpg`, only that signed-in user can create, change or delete objects in their own folder, and
+nobody can list the bucket. Photos are checked by their bytes (JPG, PNG or WebP, at most 5 MB) and re-encoded in the
+browser to a 512 x 512 JPEG, which removes EXIF and GPS metadata. Undo with
+`supabase/rollbacks/2026103001_avatar_storage.down.sql`, which stops serving photos without deleting any.
 
 **Upgrading an existing v1 project:** run migrations 3 and 4. It moves every group's old JSON data into the new
 tables inside one transaction, then drops the old column. Migration 4 makes group import enforce the same
@@ -234,7 +242,7 @@ tables inside one transaction, then drops the old column. Migration 4 makes grou
 | Database (PGlite) | The real migrations: RLS isolation between users, anonymous access denied, validation triggers, sharing rules, activity log, v1 data upgrade, SQL balances equal JS balances | `npm run test:db` |
 | Browser (Playwright) | Full guest flow in Chromium on desktop and a phone viewport, persistence after reload, per-group currency, every URL loads, no console errors, no sideways scrolling | `npm run test:e2e` |
 
-276 Vitest test cases (232 unit, hook, app and rollback-compatibility tests in `src`, 44 database tests) plus 9 Playwright scenarios, each run on a desktop and a phone viewport (18 browser runs). What is **not** automated: real email delivery and Supabase Realtime itself (checked by hand
+309 Vitest test cases (257 unit, hook, app and rollback-compatibility tests in `src`, 52 database tests) plus 12 Playwright scenarios, each run on a desktop and a phone viewport (24 browser runs). What is **not** automated: real email delivery and Supabase Realtime itself (checked by hand
 with the checklist above).
 
 ## Error handling

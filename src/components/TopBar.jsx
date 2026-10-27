@@ -7,6 +7,8 @@ import {
 } from '@ant-design/icons';
 import { useApp } from '../state/AppContext';
 import UserAvatar from './UserAvatar';
+import { managedAvatarSrc } from '../lib/avatarUrl';
+import { supabaseUrl } from '../supabase';
 import { readLastGroup } from '../lib/storage';
 
 const { Header } = Layout;
@@ -69,7 +71,14 @@ export default function TopBar() {
           >
             <Badge dot={Boolean(auth.user)} color="#43a87a">
               {auth.user
-                ? <UserAvatar size="small" name={profile?.display_name || auth.user.email} seed={auth.user.id} />
+                ? (
+                  <UserAvatar
+                    size="small"
+                    name={profile?.display_name || auth.user.email}
+                    seed={auth.user.id}
+                    src={managedAvatarSrc(profile?.avatar_url, auth.user.id, supabaseUrl)}
+                  />
+                )
                 : <Avatar size="small" icon={<UserOutlined />} />}
             </Badge>
             <span className="account-label">{profile?.display_name || (auth.user ? 'Account' : 'Sign in')}</span>

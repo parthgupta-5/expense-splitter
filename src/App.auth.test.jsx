@@ -16,7 +16,7 @@ import * as repo from './data/cloudRepo';
 
 const mocks = vi.hoisted(() => ({ auth: {} }));
 
-vi.mock('./supabase', () => ({ supabase: null, supabaseConfigured: true, normalizeSupabaseUrl: () => '' }));
+vi.mock('./supabase', () => ({ supabase: null, supabaseConfigured: true, normalizeSupabaseUrl: () => '', supabaseUrl: '' }));
 vi.mock('./state/useAuth', () => ({ useAuth: () => mocks.auth }));
 vi.mock('./data/cloudRepo', () => ({
   fetchGroups: vi.fn(),

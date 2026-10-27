@@ -1,6 +1,7 @@
 // All Supabase data access. Every function throws the Supabase error on failure; callers decide how to report it.
 // Authorisation is enforced by Row Level Security and the database functions, not by this file.
 import { supabase } from '../supabase';
+import { AVATAR_BUCKET, newAvatarPath } from '../lib/avatarUrl';
 import {
   expenseToRow, groupToImportPayload, paymentToRow, rowToGroup, snapshotToRow,
 } from './mappers';
@@ -105,6 +106,22 @@ export async function fetchProfile(userId) {
 export async function saveProfile(userId, profile) {
   const rows = check(await supabase.from('profiles').update(profile).eq('id', userId).select('id'));
   if (!rows?.length) throw new Error('Your profile was not found. Sign out and sign in again.');
+}
+
+/**
+ * Uploads an already re-encoded profile photo as a new object in the user's own folder (never overwriting one) and
+ * resolves to { path, url }. The Storage policies only accept <user id>/<uuid>.jpg from that signed-in user.
+ */
+export async function uploadAvatar(userId, blob) {
+  const path = newAvatarPath(userId);
+  const bucket = supabase.storage.from(AVATAR_BUCKET);
+  check(await bucket.upload(path, blob, { contentType: 'image/jpeg', cacheControl: '31536000', upsert: false }));
+  return { path, url: bucket.getPublicUrl(path).data.publicUrl };
+}
+
+/** Deletes one of the user's own photo objects (a path from ownAvatarPath). */
+export async function removeAvatarObject(path) {
+  check(await supabase.storage.from(AVATAR_BUCKET).remove([path]));
 }
 
 /** 'available' | 'yours' | 'taken' | 'invalid' | 'reserved'. */

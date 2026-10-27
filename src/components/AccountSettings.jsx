@@ -7,6 +7,9 @@ import { CheckCircleFilled, LogoutOutlined } from '@ant-design/icons';
 import { useApp } from '../state/AppContext';
 import UserAvatar from './UserAvatar';
 import UsernameDialog from './UsernameDialog';
+import ProfilePhoto from './ProfilePhoto';
+import { managedAvatarSrc } from '../lib/avatarUrl';
+import { supabaseUrl } from '../supabase';
 import { friendlyError } from '../lib/errors';
 import { writeLastGroup } from '../lib/storage';
 import { needsUsername } from '../lib/username';
@@ -27,6 +30,8 @@ export default function AccountSettings() {
   const provisional = needsUsername(profile);
   // Accounts made with Google only have no password to change.
   const hasPassword = Boolean(user.app_metadata?.providers?.includes('email'));
+  // Only a photo this app uploaded for this user is shown; anything else falls back to the initial.
+  const photo = managedAvatarSrc(profile?.avatar_url, user.id, supabaseUrl);
 
   const saveName = async ({ display_name: value }) => {
     const name = value.trim();
@@ -63,7 +68,7 @@ export default function AccountSettings() {
     <Card className="setting-card account-card" id="account">
       <section aria-labelledby="account-heading">
         <div className="account-header">
-          <UserAvatar name={displayName || user.email} seed={user.id} size={56} />
+          <UserAvatar name={displayName || user.email} seed={user.id} size={56} src={photo} />
           <div className="account-identity">
             <Title level={2} id="account-heading" className="account-title">{displayName || 'Your account'}</Title>
             {profile?.username && !provisional && <Text className="account-username">@{profile.username}</Text>}
@@ -71,6 +76,10 @@ export default function AccountSettings() {
         </div>
 
         <dl className="account-details">
+          <div>
+            <dt>Photo</dt>
+            <dd><ProfilePhoto hasPhoto={Boolean(photo)} /></dd>
+          </div>
           <div>
             <dt>Email</dt>
             <dd>{user.email}<Text type="secondary" className="account-note"> · only you can see this</Text></dd>
