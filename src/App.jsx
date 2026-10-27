@@ -1,4 +1,6 @@
-import React, { Suspense, lazy, useEffect } from 'react';
+import React, {
+  Suspense, lazy, useEffect, useState,
+} from 'react';
 import {
   Link, Navigate, Route, Routes, useLocation, useNavigate, useParams,
 } from 'react-router';
@@ -10,6 +12,7 @@ import TopBar from './components/TopBar';
 import { readLastGroup } from './lib/storage';
 import { needsUsername } from './lib/username';
 import { CALLBACK_PATH } from './lib/authRedirect';
+import { findGroup, groupPath } from './lib/groupSlug';
 
 // Pages and dialogs load on demand, so the first download only contains what the current screen needs.
 const GroupPage = lazy(() => import('./pages/GroupPage'));
@@ -34,13 +37,31 @@ function HomeRedirect() {
   const { groups } = workspace;
   if (!groups.length) return <Navigate replace to="/groups" />;
   const target = groups.find((group) => group.id === readLastGroup()) || groups[0];
-  return <Navigate replace to={'/groups/' + target.id} />;
+  return <Navigate replace to={groupPath(target, groups)} />;
 }
 
-/** Remount the group page per group so form state never leaks from one group into another. */
+/**
+ * /groups/goa-trip (or an old /groups/<id> link) opens that group, and the address bar is tidied to the readable
+ * form. The group is remembered by id, so renaming it (here or by another member) moves the address instead of
+ * losing the page. Remounts per group so form state never leaks from one group into another.
+ */
 function GroupRoute() {
-  const { groupId } = useParams();
-  return <GroupPage key={groupId} />;
+  const { groupId: segment } = useParams();
+  const { workspace } = useApp();
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  const { groups } = workspace;
+  const [openedId, setOpenedId] = useState(null);
+  const group = findGroup(groups, segment) || groups.find((item) => item.id === openedId) || null;
+  if (group && group.id !== openedId) setOpenedId(group.id);
+  const canonical = group ? groupPath(group, groups) : null;
+
+  useEffect(() => {
+    if (canonical && pathname !== canonical) navigate(canonical, { replace: true });
+  }, [canonical, pathname, navigate]);
+
+  const id = group?.id ?? segment;
+  return <GroupPage key={id} groupId={id} />;
 }
 
 function NotFoundPage() {

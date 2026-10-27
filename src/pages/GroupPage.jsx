@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { Link } from 'react-router';
 import {
   Button, Card, Col, Result, Row, Statistic, Tag, Tooltip,
 } from 'antd';
@@ -42,8 +42,8 @@ function useScrolled(threshold = 100) {
   return scrolled;
 }
 
-export default function GroupPage() {
-  const { groupId } = useParams();
+/** One group's page. `groupId` is the group's id (the route works out which group an address refers to). */
+export default function GroupPage({ groupId }) {
   const {
     workspace, notify, modal,
   } = useApp();
