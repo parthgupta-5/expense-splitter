@@ -1,11 +1,12 @@
 import React from 'react';
 import {
-  Button, Card, Select, Space, Tag, Typography, Upload,
+  Button, Card, Select, Space, Typography, Upload,
 } from 'antd';
 import {
   DownloadOutlined, MoonOutlined, SunOutlined, UploadOutlined,
 } from '@ant-design/icons';
 import { useApp } from '../state/AppContext';
+import AccountSettings from '../components/AccountSettings';
 import PageIntro from '../components/PageIntro';
 import { parseBackupText, portableGroup } from '../lib/backup';
 import { CURRENCIES, DEFAULT_CURRENCY } from '../lib/currency';
@@ -25,7 +26,7 @@ const Setting = ({ title, description, children }) => (
 
 export default function SettingsPage() {
   const {
-    workspace, auth, notify, modal, dark, toggleDark, openAuth,
+    workspace, notify, modal, dark, toggleDark, openAuth,
   } = useApp();
   const { actions } = workspace;
   const cloud = workspace.mode === 'cloud';
@@ -74,6 +75,7 @@ export default function SettingsPage() {
     <>
       <PageIntro title="Settings" />
       <section className="page-panel settings-panel">
+        {cloud && <AccountSettings />}
         <Setting title="Default currency" description="Used for new groups. Each group can have its own currency.">
           <Select
             value={workspace.preferences.currency || DEFAULT_CURRENCY}
@@ -95,11 +97,11 @@ export default function SettingsPage() {
             </Upload>
           </Space>
         </Setting>
-        <Setting title="Account" description={cloud ? auth.user?.email : 'Sign in to sync across devices and share groups.'}>
-          {cloud
-            ? <Tag color="green">Saved to your account</Tag>
-            : <Button onClick={() => openAuth('signup')}>Sign in or create account</Button>}
-        </Setting>
+        {!cloud && (
+          <Setting title="Account" description="Sign in to sync across devices and share groups.">
+            <Button onClick={() => openAuth('signup')}>Sign in or create account</Button>
+          </Setting>
+        )}
       </section>
     </>
   );

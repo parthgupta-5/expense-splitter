@@ -77,6 +77,18 @@ describe('App (guest mode)', () => {
     await waitFor(() => expect(document.title).toBe('Your groups · Expense Splitter'));
   });
 
+  it('keeps the guest account pages: /profile explains accounts, Settings offers sign-in and backup', async () => {
+    renderAt('/profile');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Your account' })).toBeTruthy();
+    cleanup();
+    renderAt('/settings');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Sign in or create account' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /download backup/i })).toBeTruthy();
+    expect(document.querySelector('.account-card')).toBeNull();
+    expect(screen.queryByText('Choose your username')).toBeNull();
+  });
+
   it('explains when a group link no longer works', async () => {
     renderAt('/groups/does-not-exist');
     expect(await screen.findByText('Group not found')).toBeTruthy();
