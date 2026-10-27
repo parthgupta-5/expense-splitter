@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { allocateCents, computeBalances, computeSettlements, computeSplit, paymentExceedsOwed, toCents, validateSplit } from './splits';
+import { allocateCents, computeBalances, computeSettlements, computeSplit, paymentExceedsOwed, sumAmounts, toCents, validateSplit } from './splits';
 
 const people = ['Asha', 'Ben', 'Chitra'];
 const sum = (obj) => Math.round(Object.values(obj).reduce((a, b) => a + b, 0) * 100) / 100;
+
+describe('sumAmounts', () => {
+  it('adds in integer cents so floating-point drift cannot appear', () => {
+    expect(0.1 + 0.2).not.toBe(0.3);
+    expect(sumAmounts([0.1, 0.2])).toBe(0.3);
+    expect(sumAmounts(Array(10).fill(0.1))).toBe(1);
+    expect(sumAmounts([])).toBe(0);
+    expect(sumAmounts(['12.5', undefined, 'abc', 7.25])).toBe(19.75);
+  });
+});
 
 describe('computeSplit', () => {
   it('equal split always adds up to the total, remainder goes to the first person', () => {

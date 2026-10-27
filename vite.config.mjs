@@ -1,7 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Vendor libraries change rarely, so they get their own long-cached chunks.
+// React and Supabase change rarely, so they get their own long-cached chunks. Ant Design is deliberately NOT
+// forced into one chunk: that would pull every component into the first download and defeat the lazy-loaded pages.
 export default defineConfig({
   plugins: [react()],
   build: {
@@ -12,8 +13,7 @@ export default defineConfig({
         codeSplitting: {
           groups: [
             { name: 'supabase', test: /node_modules[\\/]@supabase/ },
-            { name: 'antd', test: /node_modules[\\/](antd|@ant-design|@rc-component|rc-[^\\/]+)[\\/]/ },
-            { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/, priority: 10 },
+            { name: 'react', test: /node_modules[\\/](react|react-dom|react-router|scheduler)[\\/]/, priority: 10 },
           ],
         },
       },

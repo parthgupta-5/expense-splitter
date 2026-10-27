@@ -27,6 +27,21 @@ describe('sanitizeGroup', () => {
     expect(group.payments).toHaveLength(0);
     expect(skipped).toBe(3 + 2 + 3);
   });
+  it('drops an expense whose shares do not add up to the amount, and keeps one that adds up in cents', () => {
+    const shares = (details, amount = 100) => ({ ...good.expenses[0], id: 'x' + amount + Object.keys(details).join(), amount, splitDetails: details });
+    const { group, skipped } = sanitizeGroup({
+      ...good,
+      expenses: [
+        shares({ Asha: 50, Ben: 49.99 }), // one cent short
+        shares({ Asha: 60, Ben: 50 }), // too much
+        shares({}), // no shares at all
+        shares({ Asha: 33.33, Ben: 33.33, Chitra: 33.34 }), // exact in cents despite float noise
+        shares({ Asha: 0.1, Ben: 0.2 }, 0.3),
+      ],
+    });
+    expect(group.expenses.map((e) => e.amount)).toEqual([100, 0.3]);
+    expect(skipped).toBe(3);
+  });
   it('rejects groups without a string id or name', () => {
     expect(sanitizeGroup({ id: 1, name: 'x' }).group).toBeNull();
     expect(sanitizeGroup({ id: 'a', name: '  ' }).group).toBeNull();

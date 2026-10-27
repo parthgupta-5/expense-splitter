@@ -3,8 +3,10 @@ on:
   push:
     branches: [main]
   pull_request:
+
 jobs:
-  test-and-build:
+  check:
+    name: Lint, unit + database tests, build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -12,8 +14,28 @@ jobs:
         with: { node-version: 22, cache: npm }
       - run: npm ci
       - run: node scripts/check-secrets.mjs
-      - run: npm test
+      - run: npm run lint
+      - run: npm run test:unit
+      - name: Database tests (real migrations + Row Level Security in PGlite)
+        run: npm run test:db
       - run: npm run build
         env:
           VITE_SUPABASE_URL: https://placeholder.supabase.co
           VITE_SUPABASE_ANON_KEY: placeholder
+
+  e2e:
+    name: Browser tests (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7

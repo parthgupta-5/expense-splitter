@@ -19,10 +19,8 @@ afterEach(cleanup);
 const people = ['Asha', 'Ben', 'Chitra'];
 
 function Harness({ onSave }) {
-  const [messageApi] = message.useMessage();
-  const expenseForm = useExpenseForm({
-    people, expenses: [], messageApi, setExpenses: (updater) => onSave(updater([])),
-  });
+  const [notify] = message.useMessage();
+  const expenseForm = useExpenseForm({ people, expenses: [], notify, onSave });
   return <ExpenseForm expenseForm={expenseForm} people={people} currencySymbol="₹" />;
 }
 

@@ -11,7 +11,8 @@ describe('history', () => {
   it('orders activity newest first and tags kind and group', () => {
     const items = collectActivity(groups);
     expect(items.map((i) => i.id)).toEqual([2, 3, 1]);
-    expect(items[0]).toMatchObject({ kind: 'payment', groupName: 'A' });
+    expect(items[0]).toMatchObject({ kind: 'payment', groupId: 'a', groupName: 'A' });
+    expect(items[1]).toMatchObject({ kind: 'expense', groupId: 'b', groupName: 'B' });
   });
   it('orders snapshots newest first with their group id', () => {
     expect(collectSnapshots(groups).map((s) => [s.id, s.groupId])).toEqual([['s2', 'b'], ['s1', 'a']]);
