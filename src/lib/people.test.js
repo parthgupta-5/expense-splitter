@@ -19,11 +19,16 @@ describe('parseNames', () => {
 });
 
 describe('removalStatus', () => {
-  const balances = { Asha: { balance: 30 }, Ben: { balance: 0 }, Chitra: { balance: 0 } };
-  const expenses = [{ payer: 'Ben', amount: 10, splitDetails: { Ben: 10 } }];
+  const balances = { Asha: { balanceCents: 3000 }, Ben: { balanceCents: 0 }, Chitra: { balanceCents: 0 } };
+  const expenses = [{ payer: 'Ben', amountCents: 1000, splitCents: { Ben: 1000 } }];
   it('blocks people with a balance, confirms people with history, frees the rest', () => {
     expect(removalStatus('Asha', balances, expenses, [])).toBe('blocked');
     expect(removalStatus('Ben', balances, expenses, [])).toBe('confirm');
     expect(removalStatus('Chitra', balances, expenses, [])).toBe('free');
+  });
+  it('blocks a one-paisa balance either way, like the database guard', () => {
+    expect(removalStatus('Ben', { Ben: { balanceCents: 1 } }, expenses, [])).toBe('blocked');
+    expect(removalStatus('Ben', { Ben: { balanceCents: -1 } }, expenses, [])).toBe('blocked');
+    expect(removalStatus('Ben', { Ben: { balanceCents: 0 } }, expenses, [])).toBe('confirm');
   });
 });

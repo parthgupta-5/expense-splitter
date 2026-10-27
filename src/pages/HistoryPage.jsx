@@ -8,7 +8,7 @@ import * as repo from '../data/cloudRepo';
 import PageIntro from '../components/PageIntro';
 import SnapshotModal from '../components/SnapshotModal';
 import { describeActivity } from '../lib/activity';
-import { formatCurrency } from '../lib/currency';
+import { formatCents } from '../lib/currency';
 import { friendlyError } from '../lib/errors';
 import { collectActivity, collectSnapshots } from '../lib/history';
 import { supabaseConfigured } from '../supabase';
@@ -29,7 +29,7 @@ function SnapshotCard({ snapshot, onView, onDelete }) {
           <br />
           <Text type="secondary">{snapshot.settlements?.length || 0} suggested payments</Text>
         </div>
-        <Text strong>{formatCurrency(snapshot.total, snapshot.currencyCode)}</Text>
+        <Text strong>{formatCents(snapshot.totalCents, snapshot.currencyCode)}</Text>
       </div>
       <div className="snapshot-actions">
         <Button type="link" onClick={() => onView(snapshot)}>View snapshot</Button>
@@ -45,7 +45,7 @@ function SnapshotCard({ snapshot, onView, onDelete }) {
 function localActivity(groups) {
   const currencies = Object.fromEntries(groups.map((group) => [group.id, group.currencyCode]));
   return collectActivity(groups).map((item) => {
-    const money = formatCurrency(item.amount, currencies[item.groupId]);
+    const money = formatCents(item.amountCents, currencies[item.groupId]);
     return {
       key: item.kind + item.id,
       kind: item.kind,
@@ -87,7 +87,7 @@ export default function HistoryPage() {
   const activity = cloud
     ? cloudActivity.rows.map((row) => {
       const group = byId[row.group_id];
-      const { text, kind } = describeActivity(row, (value) => formatCurrency(value, group?.currencyCode));
+      const { text, kind } = describeActivity(row, (cents) => formatCents(cents, group?.currencyCode));
       return {
         key: 'log' + row.id, kind, groupName: group?.name || 'Deleted group', createdAt: row.created_at, label: kind, text,
       };

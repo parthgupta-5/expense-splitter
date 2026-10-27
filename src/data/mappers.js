@@ -1,22 +1,25 @@
-// Converts between the app's objects (amounts in currency units, camelCase) and database rows
-// (integer cents, snake_case). Pure functions, so the conversions are unit-tested.
+// Converts between the app's objects (camelCase) and database rows (snake_case). Money is integer cents on both
+// sides. Pure functions, so the conversions are unit-tested.
+import { normalizeSnapshot, portableSnapshot } from '../lib/backup';
 import { DEFAULT_CURRENCY, isCurrency } from '../lib/currency';
-import { fromCents, toCents } from '../lib/splits';
 
 const byNewest = (field) => (a, b) => new Date(b[field] || 0) - new Date(a[field] || 0);
 const mapValues = (object, fn) => Object.fromEntries(Object.entries(object || {}).map(([k, v]) => [k, fn(v)]));
+// Raw split inputs are kept only where they are weights. v2.0 also stored custom amounts here as decimals; those
+// are the same as split_details, so they are not read.
+const WEIGHTED_SPLITS = new Set(['shares', 'percentages']);
 
 export const rowToExpense = (row) => ({
   id: row.id,
   description: row.description,
-  amount: fromCents(Number(row.amount_cents)),
+  amountCents: Number(row.amount_cents),
   payer: row.payer,
   category: row.category || 'Other',
   splitType: row.split_type || 'equal',
-  splitDetails: mapValues(row.split_details, (cents) => fromCents(Number(cents))),
+  splitCents: mapValues(row.split_details, Number),
   participants: Array.isArray(row.participants) && row.participants.length
     ? row.participants : Object.keys(row.split_details || {}),
-  splitValues: row.split_values || undefined,
+  splitValues: WEIGHTED_SPLITS.has(row.split_type) && row.split_values ? row.split_values : undefined,
   note: row.note || '',
   createdAt: row.created_at,
   updatedAt: row.updated_at,
@@ -27,13 +30,13 @@ export const expenseToRow = (expense, groupId) => ({
   id: expense.id,
   group_id: groupId,
   description: String(expense.description || '').trim(),
-  amount_cents: toCents(expense.amount),
+  amount_cents: expense.amountCents,
   payer: expense.payer,
   category: expense.category || 'Other',
   split_type: expense.splitType || 'equal',
-  split_details: mapValues(expense.splitDetails, toCents),
-  participants: expense.participants || Object.keys(expense.splitDetails || {}),
-  split_values: expense.splitType && expense.splitType !== 'equal' && expense.splitValues ? expense.splitValues : null,
+  split_details: { ...expense.splitCents },
+  participants: expense.participants || Object.keys(expense.splitCents || {}),
+  split_values: WEIGHTED_SPLITS.has(expense.splitType) && expense.splitValues ? expense.splitValues : null,
   note: expense.note || '',
 });
 
@@ -41,7 +44,7 @@ export const rowToPayment = (row) => ({
   id: row.id,
   payer: row.payer,
   payee: row.payee,
-  amount: fromCents(Number(row.amount_cents)),
+  amountCents: Number(row.amount_cents),
   createdAt: row.created_at,
   createdBy: row.created_by,
 });
@@ -51,13 +54,15 @@ export const paymentToRow = (payment, groupId) => ({
   group_id: groupId,
   payer: payment.payer,
   payee: payment.payee,
-  amount_cents: toCents(payment.amount),
+  amount_cents: payment.amountCents,
 });
 
-export const rowToSnapshot = (row) => ({ ...(row.data || {}), id: row.id, savedAt: row.saved_at });
+/** Cents fields are used when present; snapshots saved by v2.0 have only decimal amounts and are converted. */
+export const rowToSnapshot = (row) => normalizeSnapshot({ ...(row.data || {}), id: row.id, savedAt: row.saved_at });
 
+/** Snapshot rows keep the v2.0 decimal fields next to the cents ones, so the v2.0 client can still show them. */
 export const snapshotToRow = (snapshot, groupId) => {
-  const { id, savedAt, groupId: _ignored, ...data } = snapshot;
+  const { id, savedAt, groupId: _ignored, ...data } = portableSnapshot(snapshot);
   return { id, group_id: groupId, data, saved_at: savedAt };
 };
 
@@ -94,10 +99,10 @@ export const groupToImportPayload = (group) => ({
     return { ...row, created_at: expense.createdAt };
   }),
   payments: (group.payments || []).map((payment) => ({
-    payer: payment.payer, payee: payment.payee, amount_cents: toCents(payment.amount), created_at: payment.createdAt,
+    payer: payment.payer, payee: payment.payee, amount_cents: payment.amountCents, created_at: payment.createdAt,
   })),
   saved_splits: (group.savedSplits || []).map((snapshot) => {
-    const { id: _id, savedAt, groupId: _groupId, ...data } = snapshot;
+    const { id: _id, savedAt, groupId: _groupId, ...data } = portableSnapshot(snapshot);
     return { data, saved_at: savedAt };
   }),
 });

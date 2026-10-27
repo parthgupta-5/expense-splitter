@@ -1,9 +1,15 @@
 // Everything that touches localStorage, plus the default shape of a group.
 // Only guest (signed-out) data is stored here. Signed-in data lives in Supabase and is never written to the device.
-import { sanitizeGroup, sanitizeGroups } from './backup';
+import { sanitizeGroup, sanitizeGroups, v2Group } from './backup';
 import { DEFAULT_CURRENCY, isCurrency } from './currency';
 
-export const STATE_KEY = 'expenseSplitterStateV2';
+// V3 is this version's copy, with money in integer cents. Every save also writes the same data to V2 in the v2.0
+// shape (decimal amounts), marked with MIRROR_MARK, so rolling back to the v2.0 client keeps every change. The v2.0
+// client rewrites V2 without the mark; a V2 without it is therefore newer than V3 and is the copy that is opened.
+export const STATE_KEY = 'expenseSplitterStateV3';
+export const V2_STATE_KEY = 'expenseSplitterStateV2';
+export const LEGACY_STATE_KEYS = [V2_STATE_KEY, 'expenseSplitterStateV1'];
+export const MIRROR_MARK = 'mirroredFromV3';
 const THEME_KEY = 'expenseSplitterThemeV1';
 const LAST_GROUP_KEY = 'expenseSplitterLastGroupV1';
 // Written by v1.x while signed in. Read once to tell cloud copies apart from real guest data, then removed.
@@ -43,8 +49,9 @@ export const legacyGroup = (saved = {}) => sanitizeGroup(rawLegacyGroup(saved)).
 const read = (key) => {
   try { return localStorage.getItem(key); } catch { return null; }
 };
+/** Resolves to false when the value could not be stored (storage full or unavailable: keep working in memory). */
 const write = (key, value) => {
-  try { localStorage.setItem(key, value); } catch { /* storage full or unavailable: keep working in memory */ }
+  try { localStorage.setItem(key, value); return true; } catch { return false; }
 };
 const remove = (key) => {
   try { localStorage.removeItem(key); } catch { /* ignore */ }
@@ -59,9 +66,24 @@ const parseObject = (text) => {
   }
 };
 
+/** True for a V2 copy saved by the v2.0 client (a usable copy without this version's mark). */
+const savedByV2Client = (text) => {
+  if (!text) return false;
+  const value = parseObject(text);
+  return Array.isArray(value.groups) && !value[MIRROR_MARK];
+};
+
+/** The saved copy to open: V3, unless the v2.0 client saved V2 after it (a rollback); then V2, then V1. */
+function savedText() {
+  const v3 = read(STATE_KEY);
+  const v2 = read(V2_STATE_KEY);
+  if (v3 && !savedByV2Client(v2)) return v3;
+  return v2 || read('expenseSplitterStateV1');
+}
+
 /** Raw saved state, sanitised so damaged or hand-edited storage can never crash the app. */
 export const readSaved = () => {
-  const raw = parseObject(read(STATE_KEY) || read('expenseSplitterStateV1'));
+  const raw = parseObject(savedText());
   return { ...raw, groups: Array.isArray(raw.groups) ? sanitizeGroups(raw.groups).groups : undefined };
 };
 
@@ -91,14 +113,18 @@ export function readGuestState() {
 }
 
 export function writeGuestState({ groups, savedPeople, preferences }) {
-  write(STATE_KEY, JSON.stringify({ groups, savedPeople, preferences }));
+  if (write(STATE_KEY, JSON.stringify({ groups, savedPeople, preferences }))) {
+    const mirror = { groups: groups.map(v2Group), savedPeople, preferences, [MIRROR_MARK]: true };
+    // A V2 copy that cannot be updated is removed rather than left stale: an unmarked stale copy would look newer.
+    if (!write(V2_STATE_KEY, JSON.stringify(mirror))) remove(V2_STATE_KEY);
+  }
   remove(LEGACY_SYNC_META_KEY);
   remove(LEGACY_LAST_USER_KEY);
 }
 
 /** Removes all guest data (after it has been moved into an account, or when the user discards it). */
 export function clearGuestState() {
-  [STATE_KEY, 'expenseSplitterStateV1', LEGACY_SYNC_META_KEY, LEGACY_LAST_USER_KEY].forEach(remove);
+  [STATE_KEY, ...LEGACY_STATE_KEYS, LEGACY_SYNC_META_KEY, LEGACY_LAST_USER_KEY].forEach(remove);
 }
 
 export const readTheme = () => read(THEME_KEY) === 'dark';

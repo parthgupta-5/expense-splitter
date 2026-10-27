@@ -1,10 +1,27 @@
 import { useState } from 'react';
 import { Form } from 'antd';
+import { centsToDecimal, parseMoneyInput } from '../lib/money';
 import { computeSplit, validateSplit } from '../lib/splits';
 import { makeId } from '../lib/storage';
 
+const SPLIT_TYPES = ['equal', 'unequal', 'shares', 'percentages'];
+const mapValues = (object, fn) => Object.fromEntries(Object.entries(object).map(([k, v]) => [k, fn(v)]));
+
+/** Custom amounts are typed text; an empty field means nothing for that person. Returns { cents } or { error }. */
+function parseCustomAmounts(participants, texts) {
+  const cents = {};
+  for (const person of participants) {
+    const text = String(texts[person] ?? '').trim();
+    const parsed = text ? parseMoneyInput(text, { allowZero: true }) : { cents: 0 };
+    if (parsed.error) return { error: person + ': ' + parsed.error };
+    cents[person] = parsed.cents;
+  }
+  return { cents };
+}
+
 /**
  * State and handlers for adding/editing an expense (split type, participants, per-person values).
+ * Amounts are integer cents; custom amounts stay as the typed text until they are saved.
  * `onSave(expense)` persists it and resolves to true when it was kept.
  */
 export function useExpenseForm({ people, expenses, onSave, notify }) {
@@ -30,8 +47,16 @@ export function useExpenseForm({ people, expenses, onSave, notify }) {
   const changeParticipants = (value) => setParticipantSel(value.length === people.length ? null : value);
 
   const submit = async (values) => {
-    const amount = Number(values.amount);
-    const problem = validateSplit(splitType, amount, participants, splitValues);
+    const total = parseMoneyInput(values.amount);
+    if (total.error) { notify.error(total.error); return; }
+    if (!SPLIT_TYPES.includes(splitType)) { notify.error('Choose a split method'); return; }
+    let inputs = splitValues;
+    if (splitType === 'unequal' && participants.length) {
+      const custom = parseCustomAmounts(participants, splitValues);
+      if (custom.error) { notify.error(custom.error); return; }
+      inputs = custom.cents;
+    }
+    const problem = validateSplit(splitType, total.cents, participants, inputs);
     if (problem) { notify.error(problem); return; }
     const previous = editingId === null ? null : expenses.find((item) => item.id === editingId);
     const now = new Date().toISOString();
@@ -39,11 +64,12 @@ export function useExpenseForm({ people, expenses, onSave, notify }) {
       id: previous?.id || makeId(),
       description: values.description.trim(),
       payer: values.payer,
-      amount,
+      amountCents: total.cents,
       splitType,
-      splitDetails: computeSplit(splitType, amount, participants, splitValues),
+      splitCents: computeSplit(splitType, total.cents, participants, inputs),
       participants: [...participants],
-      splitValues: splitType === 'equal' ? undefined : { ...splitValues },
+      // Shares and percentages are weights, kept so the form can show them again; custom amounts equal splitCents.
+      splitValues: splitType === 'shares' || splitType === 'percentages' ? { ...splitValues } : undefined,
       createdAt: previous?.createdAt || now,
       updatedAt: now,
       category: values.category || 'Other',
@@ -60,31 +86,34 @@ export function useExpenseForm({ people, expenses, onSave, notify }) {
   const edit = (id) => {
     const expense = expenses.find((item) => item.id === id);
     if (!expense) return;
-    const details = expense.splitDetails || {};
-    const shares = Object.values(details);
+    const split = expense.splitCents || {};
+    const shares = Object.values(split);
+    // Expenses saved before split types existed: equal when every share is within a cent of total / n.
     const wasEqual = shares.length > 0
-      && shares.every((share) => Math.abs(Number(share) - Number(expense.amount) / shares.length) < 0.01);
+      && shares.every((share) => Math.abs(share * shares.length - expense.amountCents) < shares.length);
     const type = expense.splitType || (wasEqual ? 'equal' : 'unequal');
     // Older expenses have no stored participants: fall back to everyone who has a share.
     const stored = Array.isArray(expense.participants) && expense.participants.length
       ? expense.participants
-      : Object.keys(details).filter((name) => Number(details[name]) > 0 || type !== 'equal');
+      : Object.keys(split).filter((name) => split[name] > 0 || type !== 'equal');
     const restored = stored.filter((name) => people.includes(name));
     setEditingId(id);
     setSplitType(type);
     setParticipantSel(restored.length === people.length ? null : restored);
-    if (expense.splitValues && type !== 'equal') setSplitValues({ ...expense.splitValues });
+    if (type === 'unequal') setSplitValues(mapValues(split, centsToDecimal));
+    else if (expense.splitValues && type !== 'equal') setSplitValues({ ...expense.splitValues });
     else if (type === 'percentages') {
       setSplitValues(Object.fromEntries(people.map((person) => [
-        person, expense.amount ? Math.round(((details[person] || 0) / expense.amount) * 10000) / 100 : 0,
+        person, expense.amountCents ? Math.round(((split[person] || 0) * 10000) / expense.amountCents) / 100 : 0,
       ])));
     } else if (type === 'shares') {
-      setSplitValues(Object.fromEntries(people.map((person) => [person, details[person] || 0])));
-    } else setSplitValues({ ...details });
+      // No stored weights: the cents themselves are proportional weights.
+      setSplitValues(Object.fromEntries(people.map((person) => [person, split[person] || 0])));
+    } else setSplitValues({});
     form.setFieldsValue({
       description: expense.description,
       payer: people.includes(expense.payer) ? expense.payer : undefined,
-      amount: expense.amount,
+      amount: centsToDecimal(expense.amountCents),
       category: expense.category || 'Other',
       note: expense.note || '',
     });

@@ -1,20 +1,22 @@
 import React from 'react';
-import { Button, Divider, Form, InputNumber, Select } from 'antd';
+import { Button, Divider, Form, Select } from 'antd';
 import { SwapOutlined } from '@ant-design/icons';
+import { parseMoneyInput } from '../lib/money';
 import { paymentExceedsOwed } from '../lib/splits';
 import { makeId } from '../lib/storage';
+import MoneyInput, { moneyRules } from './MoneyInput';
 
 /** Records a repayment between two people. `onAddPayment` resolves to true when the payment was kept. */
 export default function PaymentForm({ people, balances, currencySymbol, onAddPayment, notify, modal }) {
   const [form] = Form.useForm();
   const options = people.map((person) => ({ label: person, value: person }));
 
-  const save = async (values) => {
+  const save = async (values, amountCents) => {
     const kept = await onAddPayment({
       payer: values.payer,
       payee: values.payee,
       id: makeId(),
-      amount: Number(values.amount),
+      amountCents,
       createdAt: new Date().toISOString(),
     });
     if (!kept) return;
@@ -24,13 +26,15 @@ export default function PaymentForm({ people, balances, currencySymbol, onAddPay
 
   const record = (values) => {
     if (values.payer === values.payee) { notify.error('Choose two different people'); return; }
-    if (!paymentExceedsOwed(balances, values.payer, values.payee, Number(values.amount))) { save(values); return; }
+    const { cents, error } = parseMoneyInput(values.amount);
+    if (error) { notify.error(error); return; }
+    if (!paymentExceedsOwed(balances, values.payer, values.payee, cents)) { save(values, cents); return; }
     modal.confirm({
       title: 'This is more than the current balance',
       content: values.payer + ' does not currently owe ' + values.payee
         + ' this much. Recording it will flip the balance. Record anyway?',
       okText: 'Record anyway',
-      onOk: () => save(values),
+      onOk: () => save(values, cents),
     });
   };
 
@@ -46,11 +50,8 @@ export default function PaymentForm({ people, balances, currencySymbol, onAddPay
           <Form.Item name="payee" rules={[{ required: true, message: 'Choose who received it' }]}>
             <Select placeholder="To" options={options} className="payment-select" aria-label="Payment to" />
           </Form.Item>
-          <Form.Item name="amount" rules={[{ required: true, message: 'Enter an amount' }]}>
-            <InputNumber
-              min={0.01} precision={2} prefix={currencySymbol} placeholder="Amount" className="payment-amount"
-              aria-label="Payment amount"
-            />
+          <Form.Item name="amount" rules={moneyRules('Enter an amount')}>
+            <MoneyInput prefix={currencySymbol} placeholder="Amount" className="payment-amount" aria-label="Payment amount" />
           </Form.Item>
           <Form.Item><Button type="primary" htmlType="submit" ghost>Record payment</Button></Form.Item>
         </Form>

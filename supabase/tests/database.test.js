@@ -4,7 +4,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import {
   as, createDatabase, createUser, errorAs, migrationFiles, newId, readMigration, runMigration,
 } from './harness.js';
-import { computeBalances, computeSplit, toCents } from '../../src/lib/splits.js';
+import { computeBalances, computeSplit } from '../../src/lib/splits.js';
+import { removalStatus } from '../../src/lib/people.js';
 
 async function createGroup(db, user, { name = 'Goa trip', people = ['Asha', 'Ben', 'Chitra'] } = {}) {
   const id = newId();
@@ -216,6 +217,42 @@ describe('server-side validation', () => {
   });
 });
 
+describe('person removal: the app and the database agree to the paisa', () => {
+  it('a one-paisa balance blocks removal in both; exactly zero allows it in both', async () => {
+    const db = await createDatabase();
+    const asha = await createUser(db, 'Asha');
+    const groupId = await createGroup(db, asha);
+    const people = ['Asha', 'Ben', 'Chitra'];
+    // 1.00 split three ways is 34/33/33. Ben repays 33 (settled); Chitra repays 32 (one paisa short).
+    const expenses = [{ payer: 'Asha', amountCents: 100, splitCents: computeSplit('equal', 100, people) }];
+    const payments = [
+      { payer: 'Ben', payee: 'Asha', amountCents: 33 },
+      { payer: 'Chitra', payee: 'Asha', amountCents: 32 },
+    ];
+    await as(db, asha, async (tx) => {
+      await insertExpense(tx, groupId, { amount: 100, split: expenses[0].splitCents });
+      for (const p of payments) await insertPayment(tx, groupId, p.payer, p.payee, p.amountCents);
+    });
+    const appSays = (name) => removalStatus(name, computeBalances(people, expenses, payments), expenses, payments);
+    const databaseSays = (name) => errorAs(db, asha, (tx) => tx.query(
+      'delete from group_people where group_id = $1 and name = $2', [groupId, name],
+    ));
+
+    expect(appSays('Chitra')).toBe('blocked');
+    expect(await databaseSays('Chitra')).toMatch(/still owes or is owed money/);
+    expect(appSays('Asha')).toBe('blocked'); // owed that paisa
+    expect(await databaseSays('Asha')).toMatch(/still owes or is owed money/);
+
+    expect(appSays('Ben')).toBe('confirm');
+    expect(await databaseSays('Ben')).toBeNull();
+
+    payments.push({ payer: 'Chitra', payee: 'Asha', amountCents: 1 });
+    await as(db, asha, (tx) => insertPayment(tx, groupId, 'Chitra', 'Asha', 1));
+    expect(appSays('Chitra')).toBe('confirm');
+    expect(await databaseSays('Chitra')).toBeNull();
+  });
+});
+
 describe('sharing', () => {
   let db; let owner; let friend; let stranger; let groupId;
   beforeAll(async () => {
@@ -341,31 +378,27 @@ describe('group_balances() matches computeBalances() in src/lib/splits.js', () =
         for (let i = 0; i < 6; i += 1) {
           const participants = people.filter(() => random() > 0.3);
           if (!participants.length) participants.push('A');
-          const amount = Math.round(random() * 100000) / 100 + 0.01;
+          const amountCents = Math.round(random() * 100000) + 1;
           const type = pick(['equal', 'shares', 'percentages']);
           const values = Object.fromEntries(participants.map((p) => [p, type === 'equal' ? 1 : Math.ceil(random() * 5)]));
-          const splitDetails = computeSplit(type, amount, participants, values);
-          const expense = { payer: pick(people), amount, splitDetails };
+          const splitCents = computeSplit(type, amountCents, participants, values);
+          const expense = { payer: pick(people), amountCents, splitCents };
           expenses.push(expense);
-          await insertExpense(tx, groupId, {
-            payer: expense.payer,
-            amount: toCents(amount),
-            split: Object.fromEntries(Object.entries(splitDetails).map(([name, value]) => [name, toCents(value)])),
-          });
+          await insertExpense(tx, groupId, { payer: expense.payer, amount: amountCents, split: splitCents });
         }
         for (let i = 0; i < 2; i += 1) {
           const [payer, payee] = [pick(people), pick(people)];
           if (payer === payee) continue;
-          const amount = Math.round(random() * 5000) / 100 + 0.01;
-          payments.push({ payer, payee, amount });
-          await insertPayment(tx, groupId, payer, payee, toCents(amount));
+          const amountCents = Math.round(random() * 5000) + 1;
+          payments.push({ payer, payee, amountCents });
+          await insertPayment(tx, groupId, payer, payee, amountCents);
         }
         const sql = (await tx.query('select * from group_balances($1)', [groupId])).rows;
         const js = computeBalances(people, expenses, payments);
         for (const row of sql) {
-          expect(row.balance_cents).toBe(toCents(js[row.name].balance));
-          expect(row.paid_cents).toBe(toCents(js[row.name].paid));
-          expect(row.share_cents).toBe(toCents(js[row.name].share));
+          expect(row.balance_cents).toBe(js[row.name].balanceCents);
+          expect(row.paid_cents).toBe(js[row.name].paidCents);
+          expect(row.share_cents).toBe(js[row.name].shareCents);
         }
       });
     }

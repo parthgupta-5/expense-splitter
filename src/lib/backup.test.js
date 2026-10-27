@@ -1,14 +1,60 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_BACKUP_BYTES, parseBackupText, sanitizeBackup, sanitizeGroup, sanitizeGroups } from './backup';
 
+// A group as v2.0 saved it (decimal amounts). Old backups and device data must keep loading.
 const good = { id: 'g1', name: 'Trip', people: ['Asha', 'Ben'], expenses: [{ id: 'e1', description: 'Dinner', payer: 'Asha', amount: 100, splitDetails: { Asha: 50, Ben: 50 } }], payments: [{ payer: 'Ben', payee: 'Asha', amount: 20 }] };
+// The same group as this version saves it (integer cents).
+const current = { id: 'g1', name: 'Trip', people: ['Asha', 'Ben'], expenses: [{ id: 'e1', description: 'Dinner', payer: 'Asha', amountCents: 10000, splitCents: { Asha: 5000, Ben: 5000 } }], payments: [{ payer: 'Ben', payee: 'Asha', amountCents: 2000 }] };
 
 describe('sanitizeGroup', () => {
   it('keeps a valid group and fills missing ids/dates', () => {
     const { group, skipped } = sanitizeGroup(good);
     expect(skipped).toBe(0);
-    expect(group.expenses[0].amount).toBe(100);
+    expect(group.expenses[0].amountCents).toBe(10000);
     expect(group.payments[0].id).toBeTruthy();
+  });
+  it('converts v2.0 decimal amounts to cents and drops the decimal fields', () => {
+    const { group } = sanitizeGroup({
+      ...good,
+      expenses: [{
+        ...good.expenses[0], amount: 100.5, splitType: 'unequal', splitDetails: { Asha: 50.25, Ben: 50.25 },
+        splitValues: { Asha: 50.25, Ben: 50.25 },
+      }, {
+        ...good.expenses[0], id: 'e2', amount: '90', splitType: 'shares', splitDetails: { Asha: '60', Ben: 30 },
+        splitValues: { Asha: 2, Ben: 1 },
+      }],
+    });
+    expect(group.expenses[0]).toMatchObject({ amountCents: 10050, splitCents: { Asha: 5025, Ben: 5025 }, splitType: 'unequal' });
+    expect(group.expenses[0]).not.toHaveProperty('amount');
+    expect(group.expenses[0]).not.toHaveProperty('splitDetails');
+    expect(group.expenses[0].splitValues).toBeUndefined(); // decimal custom amounts are not kept in state
+    expect(group.expenses[1]).toMatchObject({ amountCents: 9000, splitCents: { Asha: 6000, Ben: 3000 }, splitValues: { Asha: 2, Ben: 1 } });
+    expect(group.payments[0]).toMatchObject({ amountCents: 2000 });
+    expect(group.payments[0]).not.toHaveProperty('amount');
+  });
+  it('keeps data saved in cents exactly as it is', () => {
+    const { group, skipped } = sanitizeGroup(current);
+    expect(skipped).toBe(0);
+    expect(group.expenses[0]).toMatchObject({ amountCents: 10000, splitCents: { Asha: 5000, Ben: 5000 } });
+    expect(group.payments[0].amountCents).toBe(2000);
+  });
+  it('rejects cents that are not whole, positive and storable', () => {
+    const expense = (extra) => ({ ...current.expenses[0], ...extra });
+    const payment = (amountCents) => ({ ...current.payments[0], amountCents });
+    const { group, skipped } = sanitizeGroup({
+      ...current,
+      expenses: [
+        expense({ amountCents: 100.5, splitCents: { Asha: 100.5 } }),
+        expense({ amountCents: 0, splitCents: { Asha: 0 } }),
+        expense({ amountCents: 1e14, splitCents: { Asha: 1e14 } }),
+        expense({ amountCents: 100, splitCents: { Asha: 101, Ben: -1 } }),
+        expense({ amountCents: '100', splitCents: { Asha: 100 } }),
+      ],
+      payments: [payment(0.5), payment(-100), payment('100'), payment(100)],
+    });
+    expect(group.expenses).toEqual([]);
+    expect(group.payments.map((p) => p.amountCents)).toEqual([100]);
+    expect(skipped).toBe(5 + 3);
   });
   it('does not crash when expenses is a string', () => {
     const { group, skipped } = sanitizeGroup({ ...good, expenses: 'oops' });
@@ -39,7 +85,7 @@ describe('sanitizeGroup', () => {
         shares({ Asha: 0.1, Ben: 0.2 }, 0.3),
       ],
     });
-    expect(group.expenses.map((e) => e.amount)).toEqual([100, 0.3]);
+    expect(group.expenses.map((e) => e.amountCents)).toEqual([10000, 30]);
     expect(skipped).toBe(3);
   });
   it('rejects groups without a string id or name', () => {
@@ -72,6 +118,13 @@ describe('parseBackupText', () => {
   it('rejects invalid JSON and oversized files', () => {
     expect(() => parseBackupText('{nope')).toThrow(/not valid JSON/);
     expect(() => parseBackupText('{}', MAX_BACKUP_BYTES + 1)).toThrow(/too large/);
+  });
+  it('imports a backup saved by this version (cents) and one saved by v2.0 (decimals) the same way', () => {
+    const fromCents = parseBackupText(JSON.stringify({ groups: [current] })).groups[0];
+    const fromDecimals = parseBackupText(JSON.stringify({ groups: [good] })).groups[0];
+    expect(fromCents.expenses[0].amountCents).toBe(fromDecimals.expenses[0].amountCents);
+    expect(fromCents.expenses[0].splitCents).toEqual(fromDecimals.expenses[0].splitCents);
+    expect(fromCents.payments[0].amountCents).toBe(fromDecimals.payments[0].amountCents);
   });
   it('reports skipped items for an import with "expenses": "oops"', () => {
     const r = parseBackupText(JSON.stringify({ groups: [{ ...good, expenses: 'oops' }] }));

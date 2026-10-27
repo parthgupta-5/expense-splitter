@@ -6,10 +6,10 @@ import {
 const expense = {
   id: 'e1',
   description: '  Dinner ',
-  amount: 100.1,
+  amountCents: 10010,
   payer: 'Asha',
   splitType: 'shares',
-  splitDetails: { Asha: 66.73, Ben: 33.37 },
+  splitCents: { Asha: 6673, Ben: 3337 },
   participants: ['Asha', 'Ben'],
   splitValues: { Asha: 2, Ben: 1 },
   category: 'Food & drink',
@@ -18,7 +18,7 @@ const expense = {
 };
 
 describe('expense mapping', () => {
-  it('stores money as integer cents and trims text', () => {
+  it('sends integer cents unchanged and trims text', () => {
     const row = expenseToRow(expense, 'g1');
     expect(row).toMatchObject({
       id: 'e1', group_id: 'g1', description: 'Dinner', amount_cents: 10010,
@@ -27,15 +27,27 @@ describe('expense mapping', () => {
     expect(Number.isInteger(row.amount_cents)).toBe(true);
   });
 
-  it('drops split values for equal splits', () => {
+  it('keeps split values only where they are weights (shares, percentages)', () => {
     expect(expenseToRow({ ...expense, splitType: 'equal' }, 'g1').split_values).toBeNull();
+    expect(expenseToRow({ ...expense, splitType: 'unequal', splitValues: { Asha: '66.73' } }, 'g1').split_values).toBeNull();
+    expect(expenseToRow({ ...expense, splitType: 'percentages', splitValues: { Asha: 60 } }, 'g1').split_values)
+      .toEqual({ Asha: 60 });
   });
 
   it('round-trips without losing a cent', () => {
     const back = rowToExpense({ ...expenseToRow(expense, 'g1'), created_at: expense.createdAt });
-    expect(back.amount).toBe(100.1);
-    expect(back.splitDetails).toEqual({ Asha: 66.73, Ben: 33.37 });
+    expect(back.amountCents).toBe(10010);
+    expect(back.splitCents).toEqual({ Asha: 6673, Ben: 3337 });
+    expect(back.splitValues).toEqual({ Asha: 2, Ben: 1 });
     expect(back.description).toBe('Dinner');
+  });
+
+  it('ignores decimal custom amounts that v2.0 stored in split_values', () => {
+    const back = rowToExpense({
+      amount_cents: 1050, split_type: 'unequal', split_details: { A: 1000, B: 50 }, split_values: { A: 10, B: 0.5 },
+    });
+    expect(back.splitCents).toEqual({ A: 1000, B: 50 });
+    expect(back.splitValues).toBeUndefined();
   });
 
   it('falls back to split names when participants are missing', () => {
@@ -45,16 +57,34 @@ describe('expense mapping', () => {
 
 describe('payment and snapshot mapping', () => {
   it('maps payments both ways', () => {
-    const row = paymentToRow({ id: 'p', payer: 'A', payee: 'B', amount: 12.5 }, 'g');
+    const row = paymentToRow({ id: 'p', payer: 'A', payee: 'B', amountCents: 1250 }, 'g');
     expect(row).toEqual({ id: 'p', group_id: 'g', payer: 'A', payee: 'B', amount_cents: 1250 });
-    expect(rowToPayment({ ...row, created_at: 'x' })).toMatchObject({ amount: 12.5, createdAt: 'x' });
+    expect(rowToPayment({ ...row, created_at: 'x' })).toMatchObject({ amountCents: 1250, createdAt: 'x' });
   });
 
-  it('keeps snapshot data as a document', () => {
-    const snapshot = { id: 's', savedAt: '2026-01-01', groupId: 'ignored', groupName: 'Trip', total: 5 };
+  it('keeps snapshot data as a document, with the v2.0 decimal total next to the cents one', () => {
+    const snapshot = { id: 's', savedAt: '2026-01-01T00:00:00.000Z', groupId: 'ignored', groupName: 'Trip', totalCents: 500 };
     const row = snapshotToRow(snapshot, 'g');
-    expect(row).toEqual({ id: 's', group_id: 'g', saved_at: '2026-01-01', data: { groupName: 'Trip', total: 5 } });
-    expect(rowToSnapshot(row)).toEqual({ id: 's', savedAt: '2026-01-01', groupName: 'Trip', total: 5 });
+    expect(row).toEqual({
+      id: 's', group_id: 'g', saved_at: '2026-01-01T00:00:00.000Z', data: { groupName: 'Trip', totalCents: 500, total: 5 },
+    });
+    expect(rowToSnapshot(row)).toMatchObject({ id: 's', savedAt: '2026-01-01T00:00:00.000Z', groupName: 'Trip', totalCents: 500 });
+  });
+
+  it('shows snapshots saved by v2.0 (decimal amounts) in cents', () => {
+    const snapshot = rowToSnapshot({
+      id: 's', saved_at: '2026-01-01T00:00:00.000Z',
+      data: {
+        groupName: 'Trip', total: 100.5,
+        expenses: [{ description: 'Hotel', amount: 100.5, payer: 'A', splitDetails: { A: 50.25, B: 50.25 } }],
+        settlements: [{ payer: 'B', payee: 'A', amount: 50.25 }],
+      },
+    });
+    expect(snapshot.totalCents).toBe(10050);
+    expect(snapshot.expenses[0]).toMatchObject({ amountCents: 10050, splitCents: { A: 5025, B: 5025 } });
+    expect(snapshot.expenses[0]).not.toHaveProperty('amount');
+    expect(snapshot.settlements[0]).toEqual({ payer: 'B', payee: 'A', amountCents: 5025 });
+    expect(snapshot).not.toHaveProperty('total');
   });
 });
 
@@ -92,14 +122,14 @@ describe('groupToImportPayload', () => {
     const payload = groupToImportPayload({
       id: 'local', name: 'Trip', currencyCode: 'USD', people: ['Asha', 'Ben'],
       expenses: [expense],
-      payments: [{ id: 'p', payer: 'Ben', payee: 'Asha', amount: 10, createdAt: 't' }],
-      savedSplits: [{ id: 's', savedAt: 't', groupId: 'local', total: 1 }],
+      payments: [{ id: 'p', payer: 'Ben', payee: 'Asha', amountCents: 1000, createdAt: 't' }],
+      savedSplits: [{ id: 's', savedAt: 't', groupId: 'local', totalCents: 100 }],
     });
     expect(payload.currency_code).toBe('USD');
     expect(payload.expenses[0]).not.toHaveProperty('id');
     expect(payload.expenses[0]).not.toHaveProperty('group_id');
     expect(payload.expenses[0]).toMatchObject({ amount_cents: 10010, created_at: expense.createdAt });
     expect(payload.payments).toEqual([{ payer: 'Ben', payee: 'Asha', amount_cents: 1000, created_at: 't' }]);
-    expect(payload.saved_splits).toEqual([{ data: { total: 1 }, saved_at: 't' }]);
+    expect(payload.saved_splits).toEqual([{ data: { totalCents: 100, total: 1 }, saved_at: 't' }]);
   });
 });

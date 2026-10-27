@@ -34,13 +34,13 @@ describe('workspaceReducer', () => {
   });
 
   it('inserts a new expense first and replaces an edited one in place', () => {
-    let state = guest([group('1', { expenses: [{ id: 'a', amount: 1 }] })]);
-    state = workspaceReducer(state, { type: 'saveExpense', groupId: '1', expense: { id: 'b', amount: 2 } });
+    let state = guest([group('1', { expenses: [{ id: 'a', amountCents: 100 }] })]);
+    state = workspaceReducer(state, { type: 'saveExpense', groupId: '1', expense: { id: 'b', amountCents: 200 } });
     expect(state.groups[0].expenses.map((e) => e.id)).toEqual(['b', 'a']);
-    state = workspaceReducer(state, { type: 'saveExpense', groupId: '1', expense: { id: 'a', amount: 5 } });
-    expect(state.groups[0].expenses).toEqual([{ id: 'b', amount: 2 }, { id: 'a', amount: 5 }]);
+    state = workspaceReducer(state, { type: 'saveExpense', groupId: '1', expense: { id: 'a', amountCents: 500 } });
+    expect(state.groups[0].expenses).toEqual([{ id: 'b', amountCents: 200 }, { id: 'a', amountCents: 500 }]);
     state = workspaceReducer(state, { type: 'removeExpense', groupId: '1', id: 'b' });
-    expect(state.groups[0].expenses).toEqual([{ id: 'a', amount: 5 }]);
+    expect(state.groups[0].expenses).toEqual([{ id: 'a', amountCents: 500 }]);
   });
 
   it('handles payments, snapshots, renames and removals', () => {

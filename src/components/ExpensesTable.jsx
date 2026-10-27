@@ -21,23 +21,23 @@ export default function ExpensesTable({ expenses, formatMoney, onEdit, onDelete 
     { title: 'Paid by', dataIndex: 'payer', key: 'payer', responsive: ['sm'] },
     {
       title: 'Amount',
-      dataIndex: 'amount',
+      dataIndex: 'amountCents',
       key: 'amount',
       align: 'right',
       className: 'cell-nowrap',
-      render: (value) => <Text strong>{formatMoney(value)}</Text>,
+      render: (cents) => <Text strong>{formatMoney(cents)}</Text>,
     },
     {
       title: 'Split by person',
-      dataIndex: 'splitDetails',
-      key: 'splitDetails',
+      dataIndex: 'splitCents',
+      key: 'split',
       render: (split, record) => (
         <div className="split-list">
           <Tag color="blue">{SPLIT_LABELS[record.splitType] || 'Equal'}</Tag>
-          {Object.entries(split || {}).map(([name, value]) => (
+          {Object.entries(split || {}).map(([name, cents]) => (
             <span className="split-person" key={name}>
               <span>{name}</span>
-              <Text strong>{formatMoney(value)}</Text>
+              <Text strong>{formatMoney(cents)}</Text>
             </span>
           ))}
         </div>

@@ -1,7 +1,6 @@
 import React from 'react';
 import { Avatar, Space, Table, Tag, Typography } from 'antd';
 import { ArrowDownOutlined, CheckCircleFilled } from '@ant-design/icons';
-import { SETTLE_EPSILON } from '../lib/splits';
 
 const { Text, Title } = Typography;
 
@@ -15,17 +14,17 @@ export default function BalancesPanel({ balances, settlements, formatMoney }) {
         <Space><Avatar size="small">{name.slice(0, 1).toUpperCase()}</Avatar><Text strong>{name}</Text></Space>
       ),
     },
-    { title: 'Their share', dataIndex: 'share', key: 'share', align: 'right', className: 'cell-nowrap', render: formatMoney },
-    { title: 'Paid', dataIndex: 'paid', key: 'paid', align: 'right', className: 'cell-nowrap', render: formatMoney },
+    { title: 'Their share', dataIndex: 'shareCents', key: 'share', align: 'right', className: 'cell-nowrap', render: formatMoney },
+    { title: 'Paid', dataIndex: 'paidCents', key: 'paid', align: 'right', className: 'cell-nowrap', render: formatMoney },
     {
       title: 'Net balance',
-      dataIndex: 'balance',
+      dataIndex: 'balanceCents',
       key: 'balance',
       align: 'right',
       className: 'cell-nowrap',
-      render: (value) => {
-        const tone = value > SETTLE_EPSILON ? 'positive' : value < -SETTLE_EPSILON ? 'negative' : '';
-        return <Text className={tone} strong>{value > SETTLE_EPSILON ? '+' : ''}{formatMoney(value)}</Text>;
+      render: (cents) => {
+        const tone = cents > 0 ? 'positive' : cents < 0 ? 'negative' : '';
+        return <Text className={tone} strong>{cents > 0 ? '+' : ''}{formatMoney(cents)}</Text>;
       },
     },
   ];
@@ -51,7 +50,7 @@ export default function BalancesPanel({ balances, settlements, formatMoney }) {
               <Text strong>{item.payer}</Text>
               <ArrowDownOutlined className="arrow-icon" />
               <Text strong>{item.payee}</Text>
-              <Text strong className="settlement-amount">{formatMoney(item.amount)}</Text>
+              <Text strong className="settlement-amount">{formatMoney(item.amountCents)}</Text>
             </div>
           ))}
         </div>

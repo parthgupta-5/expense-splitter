@@ -1,17 +1,15 @@
 // Turns server activity-log rows into readable sentences for the History page.
-import { fromCents } from './splits';
-
 const quote = (text) => '“' + (text || 'Expense') + '”';
 
 /**
  * @param entry  activity_log row: { action, actor_name, details, ... }
- * @param money  formats an amount in currency units
+ * @param money  formats an amount in integer cents
  * @returns { text, kind } where kind is 'expense' | 'payment' | 'people' | 'group'
  */
 export function describeActivity(entry, money) {
   const who = entry.actor_name || 'Someone';
   const d = entry.details || {};
-  const amount = d.amount_cents === undefined ? '' : money(fromCents(Number(d.amount_cents)));
+  const amount = d.amount_cents === undefined ? '' : money(Number(d.amount_cents));
   switch (entry.action) {
     case 'expense_added': return { kind: 'expense', text: `${who} added ${quote(d.description)} · ${amount}, paid by ${d.payer}` };
     case 'expense_updated': return { kind: 'expense', text: `${who} edited ${quote(d.description)} · ${amount}` };

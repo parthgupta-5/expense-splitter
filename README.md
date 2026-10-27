@@ -88,7 +88,7 @@ Browser (React SPA on Vercel)
  │    workspaceReducer.js        pure state transitions (unit-tested)
  ├─ src/data/
  │    cloudRepo.js               every Supabase query and RPC in one place
- │    mappers.js                 app objects <-> database rows (currency units <-> integer cents)
+ │    mappers.js                 app objects <-> database rows (money is integer cents on both sides)
  └─ src/lib/                     pure, unit-tested logic: splits, people, backup, csv, storage, currency, activity
           │  HTTPS (anon key + user JWT)          ▲ Realtime (websocket, RLS-filtered)
           ▼                                       │
@@ -221,7 +221,7 @@ tables inside one transaction, then drops the old column. Migration 4 makes grou
 | Database (PGlite) | The real migrations: RLS isolation between users, anonymous access denied, validation triggers, sharing rules, activity log, v1 data upgrade, SQL balances equal JS balances | `npm run test:db` |
 | Browser (Playwright) | Full guest flow in Chromium on desktop and a phone viewport, persistence after reload, per-group currency, every URL loads, no console errors, no sideways scrolling | `npm run test:e2e` |
 
-123 Vitest test cases (95 unit, hook and app tests in `src`, 28 database tests) plus 3 Playwright scenarios, each run on a desktop and a phone viewport (6 browser runs). What is **not** automated: real email delivery and Supabase Realtime itself (checked by hand
+183 Vitest test cases (154 unit, hook, app and rollback-compatibility tests in `src`, 29 database tests) plus 5 Playwright scenarios, each run on a desktop and a phone viewport (10 browser runs). What is **not** automated: real email delivery and Supabase Realtime itself (checked by hand
 with the checklist above).
 
 ## Error handling

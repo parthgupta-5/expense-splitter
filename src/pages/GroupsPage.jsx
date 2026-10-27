@@ -7,7 +7,7 @@ import { PlusOutlined, TeamOutlined } from '@ant-design/icons';
 import { useApp } from '../state/AppContext';
 import PageIntro from '../components/PageIntro';
 import { currencySymbol } from '../lib/currency';
-import { sumAmounts } from '../lib/splits';
+import { centsToDecimal, sumCents } from '../lib/money';
 import { readLastGroup } from '../lib/storage';
 
 const { Text, Title } = Typography;
@@ -29,7 +29,7 @@ export default function GroupsPage() {
         <Row gutter={[16, 16]}>
           {groups.map((group, index) => {
             const recent = group.id === lastGroupId;
-            const groupTotal = sumAmounts((group.expenses || []).map((expense) => expense.amount));
+            const groupTotalCents = sumCents((group.expenses || []).map((expense) => expense.amountCents));
             return (
               <Col xs={24} sm={12} xl={8} key={group.id}>
                 <Card className={'group-card ' + (recent ? 'group-card-active' : '')} hoverable onClick={() => open(group)}>
@@ -46,7 +46,7 @@ export default function GroupsPage() {
                   <div className="group-card-bottom">
                     <Statistic
                       title="Group spend"
-                      value={groupTotal}
+                      value={centsToDecimal(groupTotalCents)}
                       precision={2}
                       prefix={currencySymbol(group.currencyCode)}
                     />
