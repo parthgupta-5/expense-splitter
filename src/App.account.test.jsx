@@ -105,6 +105,22 @@ describe('Settings when signed in', () => {
     expect(screen.queryByText('Choose your username')).toBeNull();
   });
 
+  it('offers a password change to email accounts, and not to Google-only accounts', async () => {
+    const user = userEvent.setup();
+    const original = mocks.auth.user;
+    mocks.auth.user = { ...original, app_metadata: { providers: ['email'] } };
+    renderAt('/settings');
+    await user.click(await screen.findByRole('button', { name: 'Change password' }));
+    expect(await screen.findByRole('heading', { level: 1, name: 'Choose a new password' })).toBeTruthy();
+    cleanup();
+
+    mocks.auth.user = { ...original, app_metadata: { providers: ['google'] } };
+    renderAt('/settings');
+    expect(await screen.findByText('You sign in with Google')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Change password' })).toBeNull();
+    mocks.auth.user = original;
+  });
+
   it('saves a new display name without touching the username', async () => {
     const user = userEvent.setup();
     repo.saveProfile.mockResolvedValue();

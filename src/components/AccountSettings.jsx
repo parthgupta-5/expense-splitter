@@ -25,6 +25,8 @@ export default function AccountSettings() {
   const { profile } = workspace;
   const displayName = profile?.display_name || user.user_metadata?.display_name || '';
   const provisional = needsUsername(profile);
+  // Accounts made with Google only have no password to change.
+  const hasPassword = Boolean(user.app_metadata?.providers?.includes('email'));
 
   const saveName = async ({ display_name: value }) => {
     const name = value.trim();
@@ -82,6 +84,14 @@ export default function AccountSettings() {
                   {provisional ? 'Choose' : 'Change'}
                 </Button>
               )}
+            </dd>
+          </div>
+          <div>
+            <dt>Password</dt>
+            <dd>
+              {hasPassword
+                ? <Button size="small" className="account-inline-button" onClick={() => navigate('/reset-password')}>Change password</Button>
+                : <Text type="secondary">You sign in with Google</Text>}
             </dd>
           </div>
           <div>
