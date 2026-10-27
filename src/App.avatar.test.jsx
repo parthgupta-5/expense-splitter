@@ -46,6 +46,7 @@ vi.mock('./data/cloudRepo', () => ({
   fetchProfile: vi.fn(),
   saveProfile: vi.fn(),
   subscribeToChanges: vi.fn(),
+  fetchActivity: vi.fn(),
   importGroup: vi.fn(),
   checkUsername: vi.fn(),
   suggestUsername: vi.fn(),
@@ -82,6 +83,7 @@ beforeEach(() => {
   repo.fetchGroups.mockResolvedValue([]);
   repo.fetchProfile.mockResolvedValue(profile());
   repo.subscribeToChanges.mockReturnValue(() => {});
+  repo.fetchActivity.mockResolvedValue([]);
   repo.saveProfile.mockResolvedValue();
   repo.uploadAvatar.mockResolvedValue({ path: `${ME}/${NEW_FILE}`, url: NEW_URL });
   repo.removeAvatarObject.mockResolvedValue();
@@ -147,6 +149,7 @@ describe('profile photo', () => {
       vi.clearAllMocks();
       repo.fetchGroups.mockResolvedValue([]);
       repo.subscribeToChanges.mockReturnValue(() => {});
+      repo.fetchActivity.mockResolvedValue([]);
       repo.saveProfile.mockResolvedValue();
       repo.uploadAvatar.mockResolvedValue({ path: `${ME}/${NEW_FILE}`, url: NEW_URL });
       reencodeAvatar.mockResolvedValue(REENCODED);

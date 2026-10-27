@@ -131,6 +131,7 @@ export async function removeMember(groupId, userId) {
   check(await supabase.rpc('remove_member', { target_group_id: groupId, member_id: userId }));
 }
 
+/** The newest activity of every group the user is a member of (Row Level Security hides all other groups). */
 export async function fetchActivity(limit = 200) {
   return check(await supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(limit)) || [];
 }
@@ -182,16 +183,18 @@ export async function setUsername(name) {
  * Live updates. Every change in a group writes an activity row (database triggers), and Realtime only delivers
  * rows the user may read (RLS), so one subscription covers expenses, payments, people, members and renames.
  * Group deletions arrive separately because the activity log is deleted with the group.
+ * onGroupChanged also receives the activity row (for the activity bell); onStatus receives 'live' while the channel is
+ * connected and 'offline' when it fails, times out or closes (the client keeps retrying and reports 'live' again).
  */
-export function subscribeToChanges({ onGroupChanged, onGroupDeleted }) {
+export function subscribeToChanges({ onGroupChanged, onGroupDeleted, onStatus = () => {} }) {
   const channel = supabase
     .channel('expense-splitter-changes')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_log' }, (payload) => {
-      if (payload.new?.group_id) onGroupChanged(payload.new.group_id);
+      if (payload.new?.group_id) onGroupChanged(payload.new.group_id, payload.new);
     })
     .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'groups' }, (payload) => {
       if (payload.old?.id) onGroupDeleted(payload.old.id);
     })
-    .subscribe();
+    .subscribe((status) => onStatus(status === 'SUBSCRIBED' ? 'live' : 'offline'));
   return () => { supabase.removeChannel(channel); };
 }

@@ -85,6 +85,26 @@ describe('useWorkspace (signed in)', () => {
     expect(result.current.groups).toEqual([]);
   });
 
+  it('shares the one live channel with the activity bell: rows to listeners, and whether it is live', async () => {
+    const { result, unmount } = signedIn();
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(result.current.realtime).toBe('connecting');
+    act(() => realtime.onStatus('live'));
+    expect(result.current.realtime).toBe('live');
+
+    const seen = [];
+    let stop;
+    act(() => { stop = result.current.actions.onActivity((row) => seen.push(row.id)); });
+    act(() => realtime.onGroupChanged('g1', { id: 7, group_id: 'g1' }));
+    act(() => realtime.onStatus('offline'));
+    expect(result.current.realtime).toBe('offline');
+    act(() => stop());
+    act(() => realtime.onGroupChanged('g1', { id: 8, group_id: 'g1' }));
+    expect(seen).toEqual([7]);
+    expect(repo.subscribeToChanges).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
   it('never writes account data to this device', async () => {
     const { result } = signedIn();
     await waitFor(() => expect(result.current.status).toBe('ready'));
@@ -113,5 +133,7 @@ describe('useWorkspace (guest)', () => {
     expect(readGuestState().groups[0].people).toEqual(['Asha']);
     expect(repo.addPeople).not.toHaveBeenCalled();
     expect(repo.fetchGroups).not.toHaveBeenCalled();
+    expect(repo.subscribeToChanges).not.toHaveBeenCalled();
+    expect(result.current.realtime).toBe('off');
   });
 });

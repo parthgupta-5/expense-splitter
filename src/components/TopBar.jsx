@@ -1,11 +1,12 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router';
-import { Avatar, Badge, Button, Layout, Space, Tooltip } from 'antd';
+import { Avatar, Button, Layout, Space, Tooltip } from 'antd';
 import {
   AppstoreOutlined, BarChartOutlined, HistoryOutlined, MoonOutlined, SettingOutlined,
   SunOutlined, TeamOutlined, UserOutlined, WalletOutlined,
 } from '@ant-design/icons';
 import { useApp } from '../state/AppContext';
+import ActivityBell from './ActivityBell';
 import UserAvatar from './UserAvatar';
 import { managedAvatarSrc } from '../lib/avatarUrl';
 import { supabaseUrl } from '../supabase';
@@ -63,24 +64,23 @@ export default function TopBar() {
               aria-label="Toggle appearance"
             />
           </Tooltip>
-          {/* Signed in, account management lives in Settings (until the activity bell takes this spot). */}
+          {auth.user && workspace.mode === 'cloud' && <ActivityBell />}
+          {/* Signed in, account management lives in Settings. */}
           <Link
             to={auth.user ? '/settings#account' : '/profile'}
             className={'nav-link account-link' + (pathname === '/profile' ? ' is-active' : '')}
             aria-label={auth.user ? 'Account' : 'Sign in'}
           >
-            <Badge dot={Boolean(auth.user)} color="#43a87a">
-              {auth.user
-                ? (
-                  <UserAvatar
-                    size="small"
-                    name={profile?.display_name || auth.user.email}
-                    seed={auth.user.id}
-                    src={managedAvatarSrc(profile?.avatar_url, auth.user.id, supabaseUrl)}
-                  />
-                )
-                : <Avatar size="small" icon={<UserOutlined />} />}
-            </Badge>
+            {auth.user
+              ? (
+                <UserAvatar
+                  size="small"
+                  name={profile?.display_name || auth.user.email}
+                  seed={auth.user.id}
+                  src={managedAvatarSrc(profile?.avatar_url, auth.user.id, supabaseUrl)}
+                />
+              )
+              : <Avatar size="small" icon={<UserOutlined />} />}
             <span className="account-label">{profile?.display_name || (auth.user ? 'Account' : 'Sign in')}</span>
           </Link>
         </Space>

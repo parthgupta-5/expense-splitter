@@ -44,8 +44,9 @@ A **local-first** web app with an optional account:
    accepts or declines from their Groups page. Members can add expenses and payments, or leave the group; only the
    owner renames the group or changes its currency. Nobody sees anyone's email address. Changes from other members
    appear within a second (Supabase Realtime).
-5. **Activity history.** For signed-in users, a server-written log of who did what ("Asha added 'Dinner' · ₹1,200").
-   Point-in-time **saved splits** (snapshots) can be viewed later.
+5. **Activity history and bell.** For signed-in users, a server-written log of who did what ("Asha added 'Dinner' ·
+   ₹1,200"). The bell in the top bar lists the latest activity across your groups, live; a dot means someone else did
+   something since you last opened it on this device. Point-in-time **saved splits** (snapshots) can be viewed later.
 6. **Accounts.** Email sign-up and sign-in, password reset by email, profile name and avatar. Groups made before
    signing in can be moved into the account in one click.
 7. **Backup and export.** JSON backup and restore with validation, and CSV export that is safe to open in spreadsheets.
@@ -141,7 +142,11 @@ Supabase Postgres
 - **Optimistic updates with honest rollback.** The screen updates immediately; if the database rejects the write, the
   user sees why and the group is re-read from the server.
 - **One realtime channel.** Every change writes an activity row, and Realtime only delivers rows the user may read,
-  so listening to `activity_log` covers expenses, payments, people, members and renames.
+  so listening to `activity_log` covers expenses, payments, people, members and renames. The activity bell reuses
+  that same channel and the same log (no notification tables): rows are merged by id, so a reload and a live update
+  never show twice, and the bell lists only groups the user can open now.
+- **Unread is per device.** The bell remembers the newest activity id you have seen in `localStorage`. It is never
+  written to Supabase, so each browser has its own dot. There are no push, email or browser notifications.
 - **The SQL and JavaScript balance maths agree.** `group_balances()` in SQL is property-tested against
   `computeBalances()` in JavaScript on random groups.
 - **Code splitting.** Pages and dialogs load on demand; React and Supabase are separate long-cached chunks.
@@ -234,6 +239,8 @@ tables inside one transaction, then drops the old column. Migration 4 makes grou
 - [ ] Invite a second account by its @username as one of the group's people; it accepts from its Groups page, the
       group appears, and an expense added there shows up in the first browser within a second.
 - [ ] The second account cannot invite people, rename the group, change its currency or delete it, and can leave.
+- [ ] With the first browser's bell panel closed, add an expense in the second: a dot appears on the first browser's
+      bell; opening it lists the expense at the top, clears the dot, and clicking it opens that group.
 - [ ] Password reset emails a 6-digit code that leads to the new-password page; refreshing any page does not 404.
 - [ ] No console errors (including Content-Security-Policy violations).
 
@@ -246,6 +253,7 @@ tables inside one transaction, then drops the old column. Migration 4 makes grou
 | `relation "public.expenses" does not exist` | Migration 3 has not been run |
 | "No account has that username" | The friend must sign up and choose their @username first |
 | Changes from others appear only after switching tabs | Realtime blocked (check CSP `wss://*.supabase.co`) or the Realtime service is paused |
+| The bell's panel says "Live updates are unavailable" | Same as above; the panel still shows recent history and re-reads it when opened |
 | Email links open localhost | Supabase Site URL / Redirect URLs still point to localhost |
 
 ## Testing
@@ -254,11 +262,11 @@ tables inside one transaction, then drops the old column. Migration 4 makes grou
 |---|---|---|
 | Unit (Vitest) | Split, balance and settlement maths (exact cents, random property tests), name rules, CSV escaping, backup and storage sanitising, cents mapping, reducer transitions, activity text | `npm run test:unit` |
 | Hook (Vitest + mocked API) | Optimistic updates, rollback with an error message when the server rejects a write, live refresh, guest-to-account import, account data never written to the device | `npm run test:unit` |
-| App (Vitest + jsdom) | Routing, adding people and an expense, settlement shown, 404 pages | `npm run test:unit` |
+| App (Vitest + jsdom) | Routing, adding people and an expense, settlement shown, 404 pages, the activity bell (unread dot, live updates without duplicates, access filtering, keyboard) | `npm run test:unit` |
 | Database (PGlite) | The real migrations: RLS isolation between users, anonymous access denied, validation triggers, sharing rules, activity log, v1 data upgrade, SQL balances equal JS balances | `npm run test:db` |
 | Browser (Playwright) | Full guest flow in Chromium on desktop and a phone viewport, persistence after reload, per-group currency, every URL loads, no console errors, no sideways scrolling | `npm run test:e2e` |
 
-336 Vitest test cases (264 unit, hook, app and rollback-compatibility tests in `src`, 72 database tests) plus 13 Playwright scenarios, each run on a desktop and a phone viewport (26 browser runs). What is **not** automated: real email delivery and Supabase Realtime itself (checked by hand
+362 Vitest test cases (290 unit, hook, app and rollback-compatibility tests in `src`, 72 database tests) plus 14 Playwright scenarios, each run on a desktop and a phone viewport (28 browser runs). What is **not** automated: real email delivery and Supabase Realtime itself (checked by hand
 with the checklist above).
 
 ## Error handling
@@ -276,6 +284,8 @@ prevents a blank screen.
   up first. Inviting reveals whether a username exists (usernames are public handles; it is rate limited).
 - **Same-expense edits are last-writer-wins.** Two members editing the *same* expense at the same moment: the later
   save wins. Different expenses never conflict.
+- **The bell's dot is per device.** Opening the panel on your phone does not clear the dot on your laptop, and the
+  panel shows the latest 30 entries (the History page shows more).
 - **Signed-in changes need a connection.** Offline writes are rejected with a message rather than queued.
 - **No currency conversion.** Each group has one currency; it changes the symbol and format only.
 - **Guest data lives only in the browser** until it is moved into an account or backed up.

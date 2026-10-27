@@ -27,6 +27,7 @@ vi.mock('./data/cloudRepo', () => ({
   fetchProfile: vi.fn(),
   saveProfile: vi.fn(),
   subscribeToChanges: vi.fn(),
+  fetchActivity: vi.fn(),
   importGroup: vi.fn(),
   updateGroup: vi.fn(),
   listMembers: vi.fn(),
@@ -95,6 +96,7 @@ beforeEach(() => {
     clear: () => store.clear(),
   });
   repo.subscribeToChanges.mockReturnValue(() => {});
+  repo.fetchActivity.mockResolvedValue([]);
   repo.listMembers.mockResolvedValue(members);
   repo.listGroupInvitations.mockResolvedValue([]);
   repo.listMyInvitations.mockResolvedValue([]);

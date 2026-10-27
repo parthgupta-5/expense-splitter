@@ -1,5 +1,6 @@
 // Everything that touches localStorage, plus the default shape of a group.
-// Only guest (signed-out) data is stored here. Signed-in data lives in Supabase and is never written to the device.
+// Only guest (signed-out) data is stored here. Signed-in data lives in Supabase and is never written to the device;
+// for signed-in users only device conveniences are kept (appearance, last opened group, the bell's last-seen id).
 import { sanitizeGroup, sanitizeGroups, v2Group } from './backup';
 import { DEFAULT_CURRENCY, isCurrency } from './currency';
 
@@ -12,6 +13,7 @@ export const LEGACY_STATE_KEYS = [V2_STATE_KEY, 'expenseSplitterStateV1'];
 export const MIRROR_MARK = 'mirroredFromV3';
 const THEME_KEY = 'expenseSplitterThemeV1';
 const LAST_GROUP_KEY = 'expenseSplitterLastGroupV1';
+const ACTIVITY_SEEN_KEY = 'expenseSplitterActivitySeenV1';
 // Written by v1.x while signed in. Read once to tell cloud copies apart from real guest data, then removed.
 const LEGACY_LAST_USER_KEY = 'expenseSplitterLastUserV1';
 export const LEGACY_SYNC_META_KEY = 'expenseSplitterSyncMetaV1';
@@ -132,6 +134,20 @@ export const saveTheme = (dark) => write(THEME_KEY, dark ? 'dark' : 'light');
 
 export const readLastGroup = () => read(LAST_GROUP_KEY);
 export const writeLastGroup = (groupId) => (groupId ? write(LAST_GROUP_KEY, groupId) : remove(LAST_GROUP_KEY));
+
+// The newest activity id each account has seen in the bell, on this device only. It is never sent to the server, so
+// the unread dot is per browser. Holds only account ids and activity ids, no group data.
+const activitySeen = () => parseObject(read(ACTIVITY_SEEN_KEY));
+/** The newest activity id this account has seen here, or null when it has never opened the bell on this device. */
+export const readActivitySeen = (userId) => {
+  const value = Number(activitySeen()[userId]);
+  return Number.isSafeInteger(value) && value >= 0 ? value : null;
+};
+export const writeActivitySeen = (userId, activityId) => {
+  const all = activitySeen();
+  all[userId] = activityId;
+  write(ACTIVITY_SEEN_KEY, JSON.stringify(all));
+};
 
 export const isNonEmptyGroup = (group) => (
   (group.people?.length || 0) + (group.expenses?.length || 0) + (group.payments?.length || 0) > 0
