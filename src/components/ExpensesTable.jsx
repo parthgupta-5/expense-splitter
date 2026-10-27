@@ -12,7 +12,7 @@ export default function ExpensesTable({ expenses, formatMoney, onEdit, onDelete 
       dataIndex: 'description',
       key: 'description',
       render: (value, record) => (
-        <Space direction="vertical" size={2}>
+        <Space orientation="vertical" size={2}>
           <Text strong>{value}</Text>
           <Text type="secondary" className="mobile-meta">{record.category || 'Other'} · Paid by {record.payer}</Text>
         </Space>
@@ -49,7 +49,7 @@ export default function ExpensesTable({ expenses, formatMoney, onEdit, onDelete 
       render: (_, record) => (
         <Space size={4}>
           <Tooltip title="Edit">
-            <Button type="text" aria-label="Edit expense" icon={<EditOutlined />} onClick={() => onEdit(record._index)} />
+            <Button type="text" aria-label="Edit expense" icon={<EditOutlined />} onClick={() => onEdit(record.id)} />
           </Tooltip>
           <Popconfirm title="Delete this expense?" onConfirm={() => onDelete(record.id)}>
             <Tooltip title="Delete">
@@ -66,7 +66,7 @@ export default function ExpensesTable({ expenses, formatMoney, onEdit, onDelete 
       size="middle"
       rowKey="id"
       columns={columns}
-      dataSource={expenses.map((expense, index) => ({ ...expense, _index: index }))}
+      dataSource={expenses}
       pagination={{ pageSize: 6, hideOnSinglePage: true }}
       locale={{
         emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No expenses yet. Add the first one above." />,

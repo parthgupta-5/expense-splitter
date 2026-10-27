@@ -1,20 +1,33 @@
 import React from 'react';
+import { Link, useLocation } from 'react-router';
 import { Avatar, Badge, Button, Layout, Space, Tooltip } from 'antd';
 import {
   AppstoreOutlined, BarChartOutlined, HistoryOutlined, MoonOutlined, SettingOutlined,
   SunOutlined, TeamOutlined, UserOutlined, WalletOutlined,
 } from '@ant-design/icons';
+import { useApp } from '../state/AppContext';
 import { isHttpsUrl } from '../lib/url';
+import { readLastGroup } from '../lib/storage';
 
 const { Header } = Layout;
 
-export default function TopBar({ page, onNavigate, counts, dark, onToggleDark, user, profile }) {
+export default function TopBar() {
+  const { workspace, auth, dark, toggleDark } = useApp();
+  const { pathname } = useLocation();
+  const { groups, savedPeople, profile } = workspace;
+  const lastGroup = groups.find((group) => group.id === readLastGroup()) || groups[0];
+
   const navItems = [
-    { key: 'dashboard', label: 'Overview', icon: <BarChartOutlined /> },
-    { key: 'groups', label: 'Groups', icon: <AppstoreOutlined />, count: counts.groups },
-    { key: 'history', label: 'History', icon: <HistoryOutlined />, count: counts.history },
-    { key: 'people', label: 'People', icon: <TeamOutlined />, count: counts.people },
-    { key: 'settings', label: 'Settings', icon: <SettingOutlined /> },
+    {
+      to: lastGroup ? '/groups/' + lastGroup.id : '/groups',
+      label: 'Overview',
+      icon: <BarChartOutlined />,
+      active: /^\/groups\/[^/]+/.test(pathname),
+    },
+    { to: '/groups', label: 'Groups', icon: <AppstoreOutlined />, count: groups.length, active: pathname === '/groups' },
+    { to: '/history', label: 'History', icon: <HistoryOutlined />, active: pathname === '/history' },
+    { to: '/people', label: 'People', icon: <TeamOutlined />, count: savedPeople.length, active: pathname === '/people' },
+    { to: '/settings', label: 'Settings', icon: <SettingOutlined />, active: pathname === '/settings' },
   ];
   const avatarSrc = isHttpsUrl(profile?.avatar_url)
     ? <img src={profile.avatar_url} alt="" referrerPolicy="no-referrer" />
@@ -23,21 +36,22 @@ export default function TopBar({ page, onNavigate, counts, dark, onToggleDark, u
   return (
     <Header className="topbar">
       <div className="topbar-inner">
-        <a href="#top" className="brand" onClick={(event) => { event.preventDefault(); onNavigate('dashboard'); }}>
+        <Link to="/" className="brand" aria-label="Expense Splitter home">
           <span className="brand-mark"><WalletOutlined /></span>
           <span>Expense <span className="brand-accent">Splitter</span></span>
-        </a>
+        </Link>
         <nav className="main-nav" aria-label="Main navigation">
           {navItems.map((item) => (
-            <Button
-              key={item.key}
-              type={page === item.key ? 'primary' : 'text'}
-              icon={item.icon}
-              onClick={() => onNavigate(item.key)}
+            <Link
+              key={item.label}
+              to={item.to}
+              className={'nav-link' + (item.active ? ' is-active' : '')}
+              aria-current={item.active ? 'page' : undefined}
             >
-              {item.label}
+              {item.icon}
+              <span>{item.label}</span>
               {item.count !== undefined && <span className="nav-count">{item.count}</span>}
-            </Button>
+            </Link>
           ))}
         </nav>
         <Space size={8}>
@@ -46,16 +60,20 @@ export default function TopBar({ page, onNavigate, counts, dark, onToggleDark, u
               shape="circle"
               type="text"
               icon={dark ? <SunOutlined /> : <MoonOutlined />}
-              onClick={onToggleDark}
+              onClick={toggleDark}
               aria-label="Toggle appearance"
             />
           </Tooltip>
-          <Button className="account-button" type="text" onClick={() => onNavigate('profile')}>
-            <Badge dot={Boolean(user)} color="#43a87a">
+          <Link
+            to="/profile"
+            className={'nav-link account-link' + (pathname === '/profile' ? ' is-active' : '')}
+            aria-label={auth.user ? 'Account' : 'Sign in'}
+          >
+            <Badge dot={Boolean(auth.user)} color="#43a87a">
               <Avatar size="small" src={avatarSrc} icon={<UserOutlined />} />
             </Badge>
-            <span className="account-label">{profile?.display_name || 'Account'}</span>
-          </Button>
+            <span className="account-label">{profile?.display_name || (auth.user ? 'Account' : 'Sign in')}</span>
+          </Link>
         </Space>
       </div>
     </Header>
