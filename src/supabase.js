@@ -19,8 +19,12 @@ const url = normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL);
 const anonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
 export const supabaseConfigured = Boolean(url && anonKey);
+// PKCE: redirects bring back a one-time code, never tokens. The /auth/callback page exchanges it explicitly (and
+// clears it from the address bar), so the client does not read sessions from arbitrary URLs.
 export const supabase = supabaseConfigured
   ? createClient(url, anonKey, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+    auth: {
+      flowType: 'pkce', persistSession: true, autoRefreshToken: true, detectSessionInUrl: false,
+    },
   })
   : null;

@@ -9,6 +9,7 @@ import { useApp } from './state/AppContext';
 import TopBar from './components/TopBar';
 import { readLastGroup } from './lib/storage';
 import { needsUsername } from './lib/username';
+import { CALLBACK_PATH } from './lib/authRedirect';
 
 // Pages and dialogs load on demand, so the first download only contains what the current screen needs.
 const GroupPage = lazy(() => import('./pages/GroupPage'));
@@ -22,6 +23,7 @@ const PeoplePage = lazy(() => import('./pages/PeoplePage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
+const AuthCallbackPage = lazy(() => import('./pages/AuthCallbackPage'));
 
 const { Content } = Layout;
 const loading = <Spin size="large" style={{ display: 'block', margin: '80px auto' }} />;
@@ -60,9 +62,9 @@ export default function App() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   // An account still on its provisional user_ name must choose a username before anything else (except finishing a
-  // password reset).
+  // sign-in or a password reset).
   const chooseUsername = workspace.mode === 'cloud' && workspace.status === 'ready' && !auth.recovering
-    && needsUsername(workspace.profile);
+    && pathname !== CALLBACK_PATH && needsUsername(workspace.profile);
 
   // The password-reset email link signs the user in; send them to the page where they choose a new password.
   useEffect(() => {
@@ -72,7 +74,10 @@ export default function App() {
   useEffect(() => { window.scrollTo?.(0, 0); }, [pathname]);
 
   let body;
-  if (!auth.ready || workspace.status === 'loading') {
+  if (pathname === CALLBACK_PATH) {
+    // Stays mounted while the new session's data loads, so the sign-in can finish and move on.
+    body = <Suspense fallback={loading}><AuthCallbackPage /></Suspense>;
+  } else if (!auth.ready || workspace.status === 'loading') {
     body = loading;
   } else if (workspace.status === 'error') {
     body = (

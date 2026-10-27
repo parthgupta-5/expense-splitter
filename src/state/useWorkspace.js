@@ -21,6 +21,8 @@ export function useWorkspace({ user, authReady, notify }) {
   const notifyRef = useRef(notify);
   useEffect(() => { stateRef.current = state; notifyRef.current = notify; });
   const userId = user?.id ?? null;
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; });
 
   // Load guest or cloud data whenever the signed-in user changes.
   useEffect(() => {
@@ -30,8 +32,21 @@ export function useWorkspace({ user, authReady, notify }) {
       return undefined;
     }
     let cancelled = false;
+    // Accounts made with Google start with an empty profile name (Google sends `full_name`/`name`, not the
+    // `display_name` the sign-up trigger reads): fill it in once, so the name and username suggestion use it.
+    const withProviderName = async (profile) => {
+      const meta = userRef.current?.user_metadata || {};
+      const name = String(meta.full_name || meta.name || '').trim().slice(0, 80);
+      if (!profile || String(profile.display_name || '').trim() || !name) return profile;
+      try {
+        await repo.saveProfile(userId, { display_name: name });
+        return { ...profile, display_name: name };
+      } catch {
+        return profile; // they can still type their name in Settings
+      }
+    };
     dispatch({ type: 'cloudLoading', userId });
-    Promise.all([repo.fetchGroups(userId), repo.fetchProfile(userId)])
+    Promise.all([repo.fetchGroups(userId), repo.fetchProfile(userId).then((profile) => withProviderName(profile))])
       .then(([groups, profile]) => {
         if (cancelled) return;
         dispatch({ type: 'loadCloud', userId, groups, profile });
