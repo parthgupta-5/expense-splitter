@@ -7,8 +7,8 @@ settle up with the fewest possible payments.
 >
 > - Author: Parth Gupta
 > - Repository: https://github.com/parthgupta-5/expense-splitter
-> - Live app: TODO (Vercel URL)
-> - Demo video: TODO (video link)
+> - Live app: https://expense-splitter-two-liart.vercel.app/
+> - Demo video: https://drive.google.com/drive/folders/18WCMGBshCLx_oNikPugSDe6uieNrnyx3?usp=sharing
 
 ## Problem statement
 
@@ -175,10 +175,16 @@ Vite bakes `VITE_*` values in at build time, so redeploy after changing them.
    4. `supabase/migrations/2026102801_import_checks_split_total.sql`
    5. `supabase/migrations/2026102901_profiles_usernames.sql`
 3. Project Settings → API: copy the **Project URL** and the **anon / publishable key**.
-4. Authentication → Providers: enable **Email**. For a smooth demo you may turn off "Confirm email" (Supabase's
-   built-in email sender is heavily rate-limited); for real use keep it on.
-5. Authentication → URL Configuration: set **Site URL** to the Vercel URL and add `https://<your-app>.vercel.app/**`
-   and `http://localhost:5173/**` to **Redirect URLs** (needed for email confirmation and password reset).
+4. Authentication → Sign In / Providers → Email: enable **Email**, turn **Confirm email** on (User Signups), set
+   **Email OTP length** to 6, **Minimum password length** to 12 and **Password requirements** to lowercase,
+   uppercase, digits and symbols. Sign-up and password reset use 6-digit codes: put `{{ .Token }}` in the **Confirm
+   signup** and **Reset password** email templates (editing templates needs custom SMTP, e.g. Brevo or Resend).
+5. Authentication → Providers → Google (optional): enable it with the Client ID and Client Secret of a Google Cloud
+   OAuth *Web application* client. Its authorized redirect URI is `https://<project-ref>.supabase.co/auth/v1/callback`
+   and its authorized JavaScript origins are the Vercel URL and `http://localhost:5173`. The secret stays in Supabase.
+6. Authentication → URL Configuration: set **Site URL** to the Vercel URL and add
+   `https://<your-app>.vercel.app/auth/callback` and `http://localhost:5173/auth/callback` to **Redirect URLs**
+   (every email link and the Google sign-in return there).
 
 **Adding usernames to an existing project:** run migration 5 *before* deploying the app version that uses it. It
 gives every existing account a provisional `user_xxxxxxxx` name, which the app asks its owner to replace at the next
@@ -204,7 +210,7 @@ tables inside one transaction, then drops the old column. Migration 4 makes grou
 - [ ] Share the group with a second account; in the second browser the group appears, and an expense added there
       shows up in the first browser within a second.
 - [ ] The second account cannot invite people or delete the group, and can leave it.
-- [ ] Password reset email opens `/reset-password`; refreshing any page does not 404.
+- [ ] Password reset emails a 6-digit code that leads to the new-password page; refreshing any page does not 404.
 - [ ] No console errors (including Content-Security-Policy violations).
 
 ### Troubleshooting
@@ -228,7 +234,7 @@ tables inside one transaction, then drops the old column. Migration 4 makes grou
 | Database (PGlite) | The real migrations: RLS isolation between users, anonymous access denied, validation triggers, sharing rules, activity log, v1 data upgrade, SQL balances equal JS balances | `npm run test:db` |
 | Browser (Playwright) | Full guest flow in Chromium on desktop and a phone viewport, persistence after reload, per-group currency, every URL loads, no console errors, no sideways scrolling | `npm run test:e2e` |
 
-224 Vitest test cases (180 unit, hook, app and rollback-compatibility tests in `src`, 44 database tests) plus 5 Playwright scenarios, each run on a desktop and a phone viewport (10 browser runs). What is **not** automated: real email delivery and Supabase Realtime itself (checked by hand
+276 Vitest test cases (232 unit, hook, app and rollback-compatibility tests in `src`, 44 database tests) plus 9 Playwright scenarios, each run on a desktop and a phone viewport (18 browser runs). What is **not** automated: real email delivery and Supabase Realtime itself (checked by hand
 with the checklist above).
 
 ## Error handling

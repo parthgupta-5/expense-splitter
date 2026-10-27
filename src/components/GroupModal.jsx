@@ -7,6 +7,7 @@ import { PlusOutlined } from '@ant-design/icons';
 import { useApp } from '../state/AppContext';
 import { CURRENCIES, DEFAULT_CURRENCY } from '../lib/currency';
 import { GROUP_NAME_MAX } from '../lib/limits';
+import { groupPath } from '../lib/groupSlug';
 
 export const groupNameRules = [
   { required: true, whitespace: true, message: 'Add a group name' },
@@ -29,7 +30,7 @@ export default function GroupModal() {
     form.resetFields();
     closeGroupDialog();
     notify.success(group.name + ' created');
-    navigate('/groups/' + group.id);
+    navigate(groupPath(group, [...workspace.groups, group]));
   };
 
   return (

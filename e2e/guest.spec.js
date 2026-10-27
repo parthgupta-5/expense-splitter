@@ -16,7 +16,7 @@ test.afterEach(async ({ page }) => {
 
 test('a guest can split a bill, settle up and keep the data after a reload', async ({ page }) => {
   await page.goto('/');
-  await expect(page).toHaveURL(/\/groups\/[\w-]+$/);
+  await expect(page).toHaveURL(/\/groups\/my-first-group$/); // a readable address, not a long id
   await expect(page.getByRole('heading', { level: 1, name: 'My first group' })).toBeVisible();
 
   await page.getByLabel('Add participant name').fill('Asha, Ben, Chitra');

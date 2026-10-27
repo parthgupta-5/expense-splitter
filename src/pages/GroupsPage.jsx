@@ -8,6 +8,7 @@ import { useApp } from '../state/AppContext';
 import PageIntro from '../components/PageIntro';
 import { currencySymbol } from '../lib/currency';
 import { centsToDecimal, sumCents } from '../lib/money';
+import { groupPath } from '../lib/groupSlug';
 import { readLastGroup } from '../lib/storage';
 
 const { Text, Title } = Typography;
@@ -17,7 +18,7 @@ export default function GroupsPage() {
   const navigate = useNavigate();
   const { groups } = workspace;
   const lastGroupId = readLastGroup();
-  const open = (group) => navigate('/groups/' + group.id);
+  const open = (group) => navigate(groupPath(group, groups));
 
   return (
     <>

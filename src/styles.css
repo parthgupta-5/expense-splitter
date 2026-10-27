@@ -221,3 +221,17 @@ body{background:var(--page)}
   .account-details>div{grid-template-columns:1fr;gap:4px}
   .account-actions .ant-btn,.username-actions .ant-btn{flex:1 1 100%}
 }
+
+/* Sign-in: Google button, live password guidance, 6-digit codes and the /auth/callback page. */
+.visually-hidden{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.google-button.ant-btn{height:42px;display:inline-flex;align-items:center;justify-content:center;gap:10px}
+.google-logo{display:block;flex:none}
+.auth-divider.ant-divider{margin:16px 0;color:var(--muted);font-size:12px}
+.password-checklist{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:4px 12px;margin:8px 0 0;padding:0;list-style:none;font-size:12px;color:var(--muted)}
+.password-checklist li{display:flex;align-items:center;gap:6px}
+.password-checklist li.is-met{color:var(--ink);font-weight:600}
+.email-code-input.ant-input{font:600 22px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.35em;text-align:center}
+.email-code-address{overflow-wrap:anywhere}
+.email-code-actions{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px;margin-top:10px}
+.email-code-status{display:block;min-height:20px;margin-top:4px;font-size:12px}
+.auth-callback{display:flex;flex-direction:column;align-items:center;gap:14px;margin:80px auto;color:var(--muted)}

@@ -6,6 +6,9 @@ import './styles.css';
 import App from './App';
 import ErrorBoundary from './ErrorBoundary';
 import { AppProvider } from './state/AppContext';
+import { routeAuthRedirect } from './lib/authRedirect';
+
+routeAuthRedirect();
 
 createRoot(document.getElementById('root')).render(
   <ErrorBoundary>
