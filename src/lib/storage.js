@@ -4,10 +4,10 @@ import { sanitizeGroup, sanitizeGroups } from './backup';
 import { DEFAULT_CURRENCY, isCurrency } from './currency';
 
 export const STATE_KEY = 'expenseSplitterStateV2';
-export const THEME_KEY = 'expenseSplitterThemeV1';
-export const LAST_GROUP_KEY = 'expenseSplitterLastGroupV1';
+const THEME_KEY = 'expenseSplitterThemeV1';
+const LAST_GROUP_KEY = 'expenseSplitterLastGroupV1';
 // Written by v1.x while signed in. Read once to tell cloud copies apart from real guest data, then removed.
-export const LEGACY_LAST_USER_KEY = 'expenseSplitterLastUserV1';
+const LEGACY_LAST_USER_KEY = 'expenseSplitterLastUserV1';
 export const LEGACY_SYNC_META_KEY = 'expenseSplitterSyncMetaV1';
 
 export const makeId = () => (globalThis.crypto && globalThis.crypto.randomUUID

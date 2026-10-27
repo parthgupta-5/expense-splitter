@@ -26,7 +26,7 @@ export function describeRejected({ duplicates, tooLong }, max = PERSON_NAME_MAX)
   return parts.join('; ');
 }
 
-export function hasActivity(name, expenses, payments) {
+function hasActivity(name, expenses, payments) {
   return expenses.some((e) => e.payer === name || (e.splitDetails && name in e.splitDetails))
     || payments.some((p) => p.payer === name || p.payee === name);
 }

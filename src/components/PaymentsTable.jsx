@@ -9,7 +9,7 @@ export default function PaymentsTable({ payments, formatMoney, onDelete }) {
     { title: 'From', dataIndex: 'payer', key: 'payer', render: (value) => <Text strong>{value}</Text> },
     { title: '', key: 'arrow', render: () => <SwapOutlined className="muted-icon" /> },
     { title: 'To', dataIndex: 'payee', key: 'payee', render: (value) => <Text strong>{value}</Text> },
-    { title: 'Amount', dataIndex: 'amount', key: 'amount', align: 'right', render: formatMoney },
+    { title: 'Amount', dataIndex: 'amount', key: 'amount', align: 'right', className: 'cell-nowrap', render: formatMoney },
     {
       title: '',
       key: 'action',

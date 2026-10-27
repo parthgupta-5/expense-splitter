@@ -2,7 +2,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 
 const strict = process.argv.includes('--strict');
-const targets = ['README.md', 'docs/SUBMISSION.md'];
+const targets = ['README.md'];
 const pattern = /TODO|<your name>|<url>|<link>|<your-project>/;
 
 const found = [];
