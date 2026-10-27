@@ -16,6 +16,8 @@ export function normalizeSupabaseUrl(value) {
 }
 
 const url = normalizeSupabaseUrl(import.meta.env.VITE_SUPABASE_URL);
+/** The project origin (https://<ref>.supabase.co); used to recognise this project's own Storage URLs. */
+export const supabaseUrl = url;
 const anonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
 
 export const supabaseConfigured = Boolean(url && anonKey);

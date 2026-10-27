@@ -13,7 +13,7 @@ import App from './App';
 import { AppProvider } from './state/AppContext';
 import { STATE_KEY, newGroup } from './lib/storage';
 
-vi.mock('./supabase', () => ({ supabase: null, supabaseConfigured: false, normalizeSupabaseUrl: () => '' }));
+vi.mock('./supabase', () => ({ supabase: null, supabaseConfigured: false, normalizeSupabaseUrl: () => '', supabaseUrl: '' }));
 
 beforeAll(() => {
   window.matchMedia = window.matchMedia || ((query) => ({
