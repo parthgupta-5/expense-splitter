@@ -8,7 +8,7 @@ import {
 
 const GROUP_SELECT = `
   id, name, currency_code, created_by, created_at, updated_at,
-  group_people ( name, created_at ),
+  group_people ( id, name, user_id, created_at ),
   expenses ( * ),
   payments ( * ),
   saved_splits ( * ),
@@ -37,8 +37,11 @@ export async function createGroup(group, userId) {
   }));
 }
 
+/** Owner only: the database refuses everyone else, so an update that changed no row is reported as such. */
 export async function updateGroup(groupId, { name, currencyCode }) {
-  check(await supabase.from('groups').update({ name: name.trim(), currency_code: currencyCode }).eq('id', groupId));
+  const rows = check(await supabase.from('groups')
+    .update({ name: name.trim(), currency_code: currencyCode }).eq('id', groupId).select('id'));
+  if (!rows?.length) throw new Error('Only the group owner can rename the group or change its currency.');
 }
 
 export async function deleteGroup(groupId) {
@@ -82,12 +85,46 @@ export async function importGroup(group) {
   return check(await supabase.rpc('import_group', { payload: groupToImportPayload(group) }));
 }
 
+/** Members with their display name, @username and the person they are in the group. No email addresses. */
 export async function listMembers(groupId) {
-  return check(await supabase.rpc('list_members', { target_group_id: groupId })) || [];
+  return check(await supabase.rpc('list_group_members', { target_group_id: groupId })) || [];
 }
 
-export async function inviteMember(groupId, email) {
-  return check(await supabase.rpc('invite_member', { target_group_id: groupId, member_email: email.trim() }));
+// Invitations: every rule (owner only, the invitee only, expiry, cooldown, limits) is enforced by the database
+// functions in 2026103101_username_invitations.sql. A rule that is not met comes back as { error }.
+const orError = (result) => {
+  if (result?.error) throw new Error(result.error);
+  return result;
+};
+
+/** Owner: invites the account with this @username to become `personId` in the group. */
+export async function inviteByUsername(groupId, personId, username) {
+  return orError(check(await supabase.rpc('invite_by_username', {
+    target_group_id: groupId, target_person_id: personId, invitee_username: username,
+  })));
+}
+
+/** Owner: the group's invitations, pending first. */
+export async function listGroupInvitations(groupId) {
+  return check(await supabase.rpc('list_group_invitations', { target_group_id: groupId })) || [];
+}
+
+export async function revokeInvitation(invitationId) {
+  return orError(check(await supabase.rpc('revoke_invitation', { invitation_id: invitationId })));
+}
+
+/** The signed-in user's own invitations, pending first. */
+export async function listMyInvitations() {
+  return check(await supabase.rpc('list_my_invitations')) || [];
+}
+
+/** Resolves to { group_id, person_name }. Safe to retry. */
+export async function acceptInvitation(invitationId) {
+  return orError(check(await supabase.rpc('accept_invitation', { invitation_id: invitationId })));
+}
+
+export async function declineInvitation(invitationId) {
+  return orError(check(await supabase.rpc('decline_invitation', { invitation_id: invitationId })));
 }
 
 export async function removeMember(groupId, userId) {

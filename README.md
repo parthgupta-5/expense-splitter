@@ -26,8 +26,9 @@ without signing up, and sign in when they want their groups on every device or s
 A **local-first** web app with an optional account:
 
 - **Guest mode (no sign-up):** everything works immediately and is saved in this browser.
-- **Signed in:** groups live in Postgres (Supabase), sync across devices, and can be **shared**: invited members add
-  expenses and payments themselves and see each other's changes live.
+- **Signed in:** groups live in Postgres (Supabase), sync across devices, and can be **shared**: friends invited by
+  their @username join as one of the group's people, add expenses and payments themselves and see each other's
+  changes live.
 - The settle-up engine nets every balance in integer cents and produces a plan with at most N-1 payments.
 
 ## Key features
@@ -39,8 +40,10 @@ A **local-first** web app with an optional account:
    total. Expenses can be edited and deleted.
 3. **Balances and settling up.** Live net balance per person and a suggested repayment plan. Recording a repayment
    larger than what is owed asks for confirmation. Someone who still owes or is owed money cannot be removed.
-4. **Sharing.** The owner invites friends by the email they signed up with. Members can add expenses and payments, or
-   leave the group. Changes from other members appear within a second (Supabase Realtime).
+4. **Sharing.** The owner invites a friend by their @username to be one of the group's people (say "Ben"); the friend
+   accepts or declines from their Groups page. Members can add expenses and payments, or leave the group; only the
+   owner renames the group or changes its currency. Nobody sees anyone's email address. Changes from other members
+   appear within a second (Supabase Realtime).
 5. **Activity history.** For signed-in users, a server-written log of who did what ("Asha added 'Dinner' · ₹1,200").
    Point-in-time **saved splits** (snapshots) can be viewed later.
 6. **Accounts.** Email sign-up and sign-in, password reset by email, profile name and avatar. Groups made before
@@ -93,10 +96,12 @@ Browser (React SPA on Vercel)
           │  HTTPS (anon key + user JWT)          ▲ Realtime (websocket, RLS-filtered)
           ▼                                       │
 Supabase Postgres
- ├─ tables: profiles, groups, group_members, group_people, expenses, payments, saved_splits, activity_log
+ ├─ tables: profiles, groups, group_members, group_people, group_invitations, expenses, payments, saved_splits,
+ │          activity_log
  ├─ Row Level Security on every table (members only)
  ├─ triggers: validate expenses/payments, block removing people with open balances, write the activity log
- └─ functions: invite_member, list_members, remove_member, import_group, group_balances
+ └─ functions: invite_by_username, accept/decline/revoke_invitation, list_my_invitations, list_group_invitations,
+               list_group_members, remove_member, import_group, group_balances
 ```
 
 ### Database design
@@ -117,9 +122,11 @@ Supabase Postgres
 | Action | Who is allowed |
 |---|---|
 | Read a group and its expenses, payments, people, log | Members of that group |
-| Add or edit expenses, payments, people; rename a group | Members |
-| Delete a group | Its owner |
-| Invite or remove members | Its owner (`invite_member`, `remove_member`) |
+| Add or edit expenses, payments, people | Members |
+| Rename a group or change its currency; delete a group | Its owner |
+| Invite (by @username) or remove members; see and revoke the group's invitations | Its owner |
+| Accept or decline an invitation | Only the account it was sent to |
+| Link an account to a person | Nobody directly: only by accepting an invitation for that person |
 | Leave a group | Any member except the owner |
 | Write the activity log, add members directly | Nobody (triggers and security-definer functions only) |
 | Anything at all | Not anonymous visitors |
@@ -175,6 +182,7 @@ Vite bakes `VITE_*` values in at build time, so redeploy after changing them.
    4. `supabase/migrations/2026102801_import_checks_split_total.sql`
    5. `supabase/migrations/2026102901_profiles_usernames.sql`
    6. `supabase/migrations/2026103001_avatar_storage.sql`
+   7. `supabase/migrations/2026103101_username_invitations.sql`
 3. Project Settings → API: copy the **Project URL** and the **anon / publishable key**.
 4. Authentication → Sign In / Providers → Email: enable **Email**, turn **Confirm email** on (User Signups), set
    **Email OTP length** to 6, **Minimum password length** to 12 and **Password requirements** to lowercase,
@@ -199,6 +207,14 @@ nobody can list the bucket. Photos are checked by their bytes (JPG, PNG or WebP,
 browser to a 512 x 512 JPEG, which removes EXIF and GPS metadata. Undo with
 `supabase/rollbacks/2026103001_avatar_storage.down.sql`, which stops serving photos without deleting any.
 
+**Username invitations:** run migration 7 before deploying the app version that uses it. Invitations replace adding
+members by email (the old function now refuses with a message, and member lists no longer include emails). An owner
+invites an account by @username to be one specific person in the group; accepting links that account to that person
+and adds it as a member in one transaction. Invitations expire after 30 days, a declined person cannot be offered to the
+same account again for 7 days, and a group can have at most 20 pending invitations. Only the owner can rename a group
+or change its currency. Existing members keep their access. Undo with
+`supabase/rollbacks/2026103101_username_invitations.down.sql` (keeps every invitation and link).
+
 **Upgrading an existing v1 project:** run migrations 3 and 4. It moves every group's old JSON data into the new
 tables inside one transaction, then drops the old column. Migration 4 makes group import enforce the same
 "shares add up to the total" rule as normal writes. The database tests include this upgrade path.
@@ -215,9 +231,9 @@ tables inside one transaction, then drops the old column. Migration 4 makes grou
 
 - [ ] As a guest: create a group, add people, add an expense of each split type; balances and the plan are correct.
 - [ ] Sign up; the "Keep the groups from this device?" dialog moves the guest group into the account.
-- [ ] Share the group with a second account; in the second browser the group appears, and an expense added there
-      shows up in the first browser within a second.
-- [ ] The second account cannot invite people or delete the group, and can leave it.
+- [ ] Invite a second account by its @username as one of the group's people; it accepts from its Groups page, the
+      group appears, and an expense added there shows up in the first browser within a second.
+- [ ] The second account cannot invite people, rename the group, change its currency or delete it, and can leave.
 - [ ] Password reset emails a 6-digit code that leads to the new-password page; refreshing any page does not 404.
 - [ ] No console errors (including Content-Security-Policy violations).
 
@@ -228,7 +244,7 @@ tables inside one transaction, then drops the old column. Migration 4 makes grou
 | Sign-in fails with a 404 or "Invalid path" | `VITE_SUPABASE_URL` ends in `/rest/v1/`; use the bare project URL (the app also trims it) |
 | Only guest mode is offered | Env vars missing at build time: add them in Vercel, redeploy |
 | `relation "public.expenses" does not exist` | Migration 3 has not been run |
-| Invited friend sees "No account uses that email" | They must sign up first, with that exact email |
+| "No account has that username" | The friend must sign up and choose their @username first |
 | Changes from others appear only after switching tabs | Realtime blocked (check CSP `wss://*.supabase.co`) or the Realtime service is paused |
 | Email links open localhost | Supabase Site URL / Redirect URLs still point to localhost |
 
@@ -242,7 +258,7 @@ tables inside one transaction, then drops the old column. Migration 4 makes grou
 | Database (PGlite) | The real migrations: RLS isolation between users, anonymous access denied, validation triggers, sharing rules, activity log, v1 data upgrade, SQL balances equal JS balances | `npm run test:db` |
 | Browser (Playwright) | Full guest flow in Chromium on desktop and a phone viewport, persistence after reload, per-group currency, every URL loads, no console errors, no sideways scrolling | `npm run test:e2e` |
 
-309 Vitest test cases (257 unit, hook, app and rollback-compatibility tests in `src`, 52 database tests) plus 12 Playwright scenarios, each run on a desktop and a phone viewport (24 browser runs). What is **not** automated: real email delivery and Supabase Realtime itself (checked by hand
+336 Vitest test cases (264 unit, hook, app and rollback-compatibility tests in `src`, 72 database tests) plus 13 Playwright scenarios, each run on a desktop and a phone viewport (26 browser runs). What is **not** automated: real email delivery and Supabase Realtime itself (checked by hand
 with the checklist above).
 
 ## Error handling
@@ -256,8 +272,8 @@ prevents a blank screen.
 
 ## Known limitations
 
-- **Inviting needs an existing account.** There is no email invitation flow yet; the friend signs up first. The
-  invite check also reveals whether an email has an account (acceptable for a friends app, not for a bank).
+- **Inviting needs an existing account with a chosen @username.** There are no invitation emails; the friend signs
+  up first. Inviting reveals whether a username exists (usernames are public handles; it is rate limited).
 - **Same-expense edits are last-writer-wins.** Two members editing the *same* expense at the same moment: the later
   save wins. Different expenses never conflict.
 - **Signed-in changes need a connection.** Offline writes are rejected with a message rather than queued.

@@ -11,12 +11,16 @@ import { groupNameRules } from './GroupModal';
 
 const { Text } = Typography;
 
-/** Rename a group, change its currency, or delete it (owner) / leave it (member). */
+/**
+ * Rename a group, change its currency, or delete it: the owner of a shared group (and a guest, whose groups are on the
+ * device). Other members see the name and currency, and can leave. The database enforces the same rule.
+ */
 export default function GroupSettingsModal({ group, open, onClose }) {
   const { workspace, notify } = useApp();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const canDelete = !group?.cloud || group.role === 'owner';
+  const canEdit = canDelete;
 
   const save = async ({ name, currencyCode }) => {
     setBusy(true);
@@ -37,7 +41,27 @@ export default function GroupSettingsModal({ group, open, onClose }) {
 
   return (
     <Modal title="Group settings" open={open} onCancel={onClose} footer={null} destroyOnHidden>
-      {group && (
+      {group && !canEdit && (
+        <div className="group-settings-readonly">
+          <dl className="account-details">
+            <div><dt>Group name</dt><dd>{group.name}</dd></div>
+            <div><dt>Currency</dt><dd>{CURRENCIES.find((item) => item.value === group.currencyCode)?.label || group.currencyCode}</dd></div>
+          </dl>
+          <Text type="secondary">Only the group owner can rename the group or change its currency.</Text>
+          <div className="danger-zone">
+            <Text type="secondary">Leaving removes your access to this group.</Text>
+            <Popconfirm
+              title={'Leave ' + group.name + '?'}
+              okButtonProps={{ danger: true }}
+              okText="Leave"
+              onConfirm={remove}
+            >
+              <Button danger icon={<DeleteOutlined />}>Leave group</Button>
+            </Popconfirm>
+          </div>
+        </div>
+      )}
+      {group && canEdit && (
         <Form
           layout="vertical"
           onFinish={save}

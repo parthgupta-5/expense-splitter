@@ -6,6 +6,7 @@ import {
 import { PlusOutlined, TeamOutlined } from '@ant-design/icons';
 import { useApp } from '../state/AppContext';
 import PageIntro from '../components/PageIntro';
+import InvitationsPanel from '../components/InvitationsPanel';
 import { currencySymbol } from '../lib/currency';
 import { centsToDecimal, sumCents } from '../lib/money';
 import { groupPath } from '../lib/groupSlug';
@@ -23,6 +24,7 @@ export default function GroupsPage() {
   return (
     <>
       <PageIntro title="Your groups" />
+      {workspace.mode === 'cloud' && <InvitationsPanel />}
       <section className="page-panel">
         <div className="page-toolbar">
           <Button type="primary" icon={<PlusOutlined />} onClick={openGroupDialog}>New group</Button>

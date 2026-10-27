@@ -66,6 +66,9 @@ export const snapshotToRow = (snapshot, groupId) => {
   return { id, group_id: groupId, data, saved_at: savedAt };
 };
 
+const sortPeople = (people) => [...(people || [])]
+  .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0) || a.name.localeCompare(b.name));
+
 /** A group row with embedded people, expenses, payments, saved splits and members (see GROUP_SELECT). */
 export function rowToGroup(row, userId) {
   const members = row.group_members || [];
@@ -74,9 +77,9 @@ export function rowToGroup(row, userId) {
     id: row.id,
     name: row.name,
     currencyCode: isCurrency(row.currency_code) ? row.currency_code : DEFAULT_CURRENCY,
-    people: [...(row.group_people || [])]
-      .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0) || a.name.localeCompare(b.name))
-      .map((person) => person.name),
+    people: sortPeople(row.group_people).map((person) => person.name),
+    // Each person's id and linked account (cloud groups only), for invitations.
+    personRecords: sortPeople(row.group_people).map((person) => ({ id: person.id, name: person.name, userId: person.user_id || null })),
     expenses: (row.expenses || []).map(rowToExpense).sort(byNewest('createdAt')),
     payments: (row.payments || []).map(rowToPayment).sort(byNewest('createdAt')),
     savedSplits: (row.saved_splits || []).map(rowToSnapshot).sort(byNewest('savedAt')),

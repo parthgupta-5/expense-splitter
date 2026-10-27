@@ -90,6 +90,11 @@ describe('App (guest mode)', () => {
     // Guests have no profile photo to manage.
     expect(screen.queryByRole('button', { name: /upload photo/i })).toBeNull();
     expect(screen.queryByLabelText('Profile photo file')).toBeNull();
+    cleanup();
+    // Guests have no cloud invitations to receive.
+    renderAt('/groups');
+    expect(await screen.findByRole('heading', { level: 1, name: 'Your groups' })).toBeTruthy();
+    expect(screen.queryByText(/Invitations for you/)).toBeNull();
   });
 
   it('explains when a group link no longer works', async () => {
