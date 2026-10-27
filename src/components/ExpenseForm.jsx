@@ -44,11 +44,11 @@ function SplitEditor({ splitType, participants, values, currencySymbol, onChange
 
 export default function ExpenseForm({ expenseForm, people, currencySymbol }) {
   const {
-    form, splitType, splitValues, participants, editingIndex,
+    form, splitType, splitValues, participants, editingId, saving,
     reset, submit, changeSplitType, setSplitValue, changeParticipants,
   } = expenseForm;
   const options = people.map((person) => ({ label: person, value: person }));
-  const editing = editingIndex !== null;
+  const editing = editingId !== null;
 
   return (
     <>
@@ -122,7 +122,7 @@ export default function ExpenseForm({ expenseForm, people, currencySymbol }) {
         )}
         <div className="form-actions">
           <Button onClick={reset}>{editing ? 'Cancel editing' : 'Clear'}</Button>
-          <Button type="primary" htmlType="submit" icon={editing ? <CheckOutlined /> : <PlusOutlined />}>
+          <Button type="primary" htmlType="submit" loading={saving} icon={editing ? <CheckOutlined /> : <PlusOutlined />}>
             {editing ? 'Save changes' : 'Add expense'}
           </Button>
         </div>

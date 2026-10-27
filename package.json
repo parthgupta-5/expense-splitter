@@ -1,13 +1,18 @@
 {
   "name": "expense-splitter",
-  "version": "1.2.0",
+  "version": "2.0.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "lint": "eslint .",
     "test": "vitest run",
-    "preflight": "npm test && npm run build && node scripts/check-secrets.mjs && node scripts/check-placeholders.mjs",
+    "test:unit": "vitest run src",
+    "test:db": "vitest run supabase",
+    "test:e2e": "playwright test",
+    "preflight": "npm run lint && npm test && npm run build && node scripts/check-secrets.mjs && node scripts/check-placeholders.mjs",
     "check:submit": "node scripts/check-placeholders.mjs --strict",
     "check:secrets": "node scripts/check-secrets.mjs"
   },
@@ -16,13 +21,20 @@
     "@supabase/supabase-js": "^2.118.0",
     "antd": "^6.6.7",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "react-router": "^7.18.4"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.11",
+    "@eslint/js": "^9.39.5",
+    "@playwright/test": "1.63.0",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.8",
     "@vitejs/plugin-react": "^6.1.2",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
     "jsdom": "^26.1.0",
     "vite": "^8.3.5",
     "vitest": "^3.2.7"

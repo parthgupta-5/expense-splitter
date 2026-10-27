@@ -1,5 +1,7 @@
 // Sanitises data coming from untrusted sources: backup files, localStorage and the cloud.
+import { isCurrency } from './currency';
 import { DESCRIPTION_MAX, GROUP_NAME_MAX, NOTE_MAX, PERSON_NAME_MAX } from './limits';
+import { toCents } from './splits';
 
 export const MAX_BACKUP_BYTES = 2 * 1024 * 1024;
 export const MAX_GROUPS = 100;
@@ -29,6 +31,9 @@ function cleanExpense(e) {
     if (!Number.isFinite(n) || n < 0) return null;
     splitDetails[name] = n;
   }
+  // The shares must add up to the total exactly (in cents), the same rule the database enforces on every write.
+  const sharesCents = Object.values(splitDetails).reduce((total, share) => total + toCents(share), 0);
+  if (sharesCents !== toCents(e.amount)) return null;
   return {
     ...e,
     id: isText(e.id) ? e.id : crypto.randomUUID(),
@@ -76,6 +81,7 @@ export function sanitizeGroup(raw) {
     ...raw,
     id: raw.id,
     name: text(raw.name, GROUP_NAME_MAX),
+    currencyCode: isCurrency(raw.currencyCode) ? raw.currencyCode : undefined,
     people,
     expenses: cleanList(raw.expenses, cleanExpense, stats),
     payments: cleanList(raw.payments, cleanPayment, stats),

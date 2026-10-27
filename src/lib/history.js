@@ -3,8 +3,8 @@ const byDateDesc = (field) => (a, b) => new Date(b[field] || 0) - new Date(a[fie
 /** All expenses and payments across groups, newest first. */
 export function collectActivity(groups) {
   return groups.flatMap((group) => [
-    ...(group.expenses || []).map((expense) => ({ ...expense, kind: 'expense', groupName: group.name })),
-    ...(group.payments || []).map((payment) => ({ ...payment, kind: 'payment', groupName: group.name })),
+    ...(group.expenses || []).map((expense) => ({ ...expense, kind: 'expense', groupId: group.id, groupName: group.name })),
+    ...(group.payments || []).map((payment) => ({ ...payment, kind: 'payment', groupId: group.id, groupName: group.name })),
   ]).sort(byDateDesc('createdAt'));
 }
 

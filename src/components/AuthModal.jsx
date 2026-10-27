@@ -1,56 +1,59 @@
 import React, { useState } from 'react';
 import { Button, Form, Input, Modal, Typography } from 'antd';
-import { supabase } from '../supabase';
+import { useApp } from '../state/AppContext';
+import { supabaseConfigured } from '../supabase';
 import { friendlyError } from '../lib/errors';
 
-const { Text } = Typography;
+const { Text, Paragraph } = Typography;
 
-export default function AuthModal({ open, mode, onModeChange, onClose, messageApi }) {
+const TITLES = { signup: 'Create your account', signin: 'Welcome back', forgot: 'Reset your password' };
+
+export default function AuthModal() {
+  const { auth, notify, authDialog, setAuthMode, closeAuth } = useApp();
+  const { open, mode } = authDialog;
   const [form] = Form.useForm();
   const [busy, setBusy] = useState(false);
-  const signup = mode === 'signup';
+
+  const switchTo = (next) => { setAuthMode(next); form.resetFields(); };
 
   const submit = async (values) => {
-    if (!supabase) {
-      messageApi.info('Cloud login is ready to activate when the Supabase project is connected. '
-        + 'Data remains saved on this device.');
+    if (!supabaseConfigured) {
+      notify.info('Accounts are not set up on this copy of the app. Your data stays saved on this device.');
       return;
     }
     setBusy(true);
     try {
-      if (signup) {
-        const { data, error } = await supabase.auth.signUp({
-          email: values.email,
-          password: values.password,
-          options: { data: { display_name: values.display_name } },
+      if (mode === 'signup') {
+        const { needsConfirmation } = await auth.signUp({
+          email: values.email, password: values.password, displayName: values.display_name.trim(),
         });
-        if (error) throw error;
-        messageApi.success(data.session ? 'Account created' : 'Check your email to confirm your account, then sign in.');
+        notify.success(needsConfirmation ? 'Check your email to confirm your account, then sign in.' : 'Account created');
+        if (needsConfirmation) { switchTo('signin'); return; }
+      } else if (mode === 'signin') {
+        await auth.signIn({ email: values.email, password: values.password });
+        notify.success('Signed in');
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email: values.email, password: values.password });
-        if (error) throw error;
-        messageApi.success('Signed in');
+        await auth.sendPasswordReset(values.email);
+        notify.success('If that email has an account, a reset link is on its way.');
       }
-      onClose(true);
+      closeAuth();
       form.resetFields();
     } catch (error) {
-      messageApi.error(friendlyError(error));
+      notify.error(friendlyError(error));
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <Modal
-      title={signup ? 'Create your account' : 'Welcome back'}
-      open={open}
-      onCancel={() => onClose(false)}
-      footer={null}
-      destroyOnHidden
-      className="auth-modal"
-    >
+    <Modal title={TITLES[mode]} open={open} onCancel={closeAuth} footer={null} destroyOnHidden className="auth-modal">
+      {mode === 'signup' && (
+        <Paragraph type="secondary">
+          An account keeps your groups in the cloud, syncs them across devices and lets you share a group with friends.
+        </Paragraph>
+      )}
       <Form form={form} layout="vertical" onFinish={submit} preserve={false}>
-        {signup && (
+        {mode === 'signup' && (
           <Form.Item name="display_name" label="Your name" rules={[{ required: true, whitespace: true }]}>
             <Input autoComplete="name" placeholder="Alex Morgan" maxLength={80} />
           </Form.Item>
@@ -58,24 +61,36 @@ export default function AuthModal({ open, mode, onModeChange, onClose, messageAp
         <Form.Item name="email" label="Email address" rules={[{ required: true, type: 'email' }]}>
           <Input autoComplete="email" placeholder="you@example.com" />
         </Form.Item>
-        <Form.Item
-          name="password"
-          label="Password"
-          rules={[{ required: true, min: 8, message: 'Use at least 8 characters.' }]}
-        >
-          <Input.Password
-            autoComplete={signup ? 'new-password' : 'current-password'}
-            placeholder="At least 8 characters"
-          />
-        </Form.Item>
+        {mode !== 'forgot' && (
+          <Form.Item
+            name="password"
+            label="Password"
+            rules={[{ required: true, min: 8, message: 'Use at least 8 characters.' }]}
+          >
+            <Input.Password
+              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+              placeholder="At least 8 characters"
+            />
+          </Form.Item>
+        )}
         <Button type="primary" block htmlType="submit" loading={busy}>
-          {signup ? 'Create account' : 'Sign in'}
+          {{ signup: 'Create account', signin: 'Sign in', forgot: 'Send reset link' }[mode]}
         </Button>
         <div className="auth-switch">
-          <Text type="secondary">{signup ? 'Already have an account?' : 'Have an account?'}</Text>
-          <Button type="link" onClick={() => { onModeChange(signup ? 'signin' : 'signup'); form.resetFields(); }}>
-            {signup ? 'Sign in' : 'Create account'}
-          </Button>
+          {mode === 'signup' && (
+            <>
+              <Text type="secondary">Already have an account?</Text>
+              <Button type="link" onClick={() => switchTo('signin')}>Sign in</Button>
+            </>
+          )}
+          {mode === 'signin' && (
+            <>
+              <Button type="link" onClick={() => switchTo('forgot')}>Forgot password?</Button>
+              <Text type="secondary">·</Text>
+              <Button type="link" onClick={() => switchTo('signup')}>Create account</Button>
+            </>
+          )}
+          {mode === 'forgot' && <Button type="link" onClick={() => switchTo('signin')}>Back to sign in</Button>}
         </div>
       </Form>
     </Modal>

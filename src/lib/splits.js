@@ -7,6 +7,9 @@ export const SETTLE_EPSILON = 0.01;
 export const toCents = (amount) => Math.round(num(amount) * 100);
 export const fromCents = (cents) => cents / 100;
 
+/** Sums amounts in integer cents, so repeated additions never drift (0.1 + 0.2 style errors). */
+export const sumAmounts = (amounts) => fromCents(amounts.reduce((total, amount) => total + toCents(amount), 0));
+
 /**
  * Largest-remainder allocation: splits `totalCents` in proportion to `weights`
  * and guarantees the returned integers sum to exactly `totalCents`.
