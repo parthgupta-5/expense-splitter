@@ -190,3 +190,7 @@ body{background:var(--page)}
   .main-nav .nav-link .anticon{display:none}
   .saved-people-list .ant-list-item{flex-wrap:wrap}
 }
+
+/* Split method: Equal carries a quiet "default" note, in the list and once chosen. */
+.split-type-label{display:inline-flex;align-items:baseline;gap:6px}
+.split-type-default.ant-typography{font-size:11px;font-weight:500}

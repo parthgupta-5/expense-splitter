@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  LEGACY_SYNC_META_KEY, STATE_KEY, clearGuestState, dropLegacyCloudCopies, isNonEmptyGroup, legacyGroup, newGroup,
-  readGuestState, readSaved, writeGuestState,
+  LEGACY_STATE_KEYS, LEGACY_SYNC_META_KEY, MIRROR_MARK, STATE_KEY, clearGuestState, dropLegacyCloudCopies, isNonEmptyGroup,
+  legacyGroup, newGroup, readGuestState, readSaved, writeGuestState,
 } from './storage';
 
 // Node 25+ ships an incomplete global localStorage, so tests use a small in-memory stand-in.
@@ -63,10 +63,39 @@ describe('guest state', () => {
     expect(readGuestState().groups.map((g) => g.name)).toEqual(['Local']);
   });
 
-  it('clearGuestState removes everything', () => {
+  it('opens data saved by v2.0 in decimals as cents, then keeps a v2.0-shaped copy up to date', () => {
+    const [v2Key] = LEGACY_STATE_KEYS;
+    const v2 = JSON.stringify({
+      groups: [{
+        id: 'old', name: 'Old trip', people: ['Asha', 'Ben'],
+        expenses: [{ id: 'e', description: 'Hotel', payer: 'Asha', amount: 100.5, splitType: 'shares',
+          splitDetails: { Asha: 67, Ben: 33.5 }, splitValues: { Asha: 2, Ben: 1 } }],
+        payments: [{ id: 'p', payer: 'Ben', payee: 'Asha', amount: 10.25 }],
+        savedSplits: [{ id: 's', groupName: 'Old trip', total: 100.5, settlements: [{ payer: 'Ben', payee: 'Asha', amount: 33.5 }] }],
+      }],
+    });
+    localStorage.setItem(v2Key, v2);
+    const state = readGuestState();
+    const [group] = state.groups;
+    expect(group.expenses[0]).toMatchObject({ amountCents: 10050, splitCents: { Asha: 6700, Ben: 3350 }, splitValues: { Asha: 2, Ben: 1 } });
+    expect(group.payments[0].amountCents).toBe(1025);
+    expect(group.savedSplits[0]).toMatchObject({ totalCents: 10050, settlements: [{ payer: 'Ben', payee: 'Asha', amountCents: 3350 }] });
+
+    writeGuestState(state);
+    expect(JSON.parse(localStorage.getItem(STATE_KEY)).groups[0].expenses[0].amountCents).toBe(10050);
+    // V2 is now this version's marked mirror, still in decimals (rollback cases are covered in compat.test.js).
+    const mirror = JSON.parse(localStorage.getItem(v2Key));
+    expect(mirror[MIRROR_MARK]).toBe(true);
+    expect(mirror.groups[0].expenses[0]).toMatchObject({ amount: 100.5, splitDetails: { Asha: 67, Ben: 33.5 } });
+    expect(mirror.groups[0].expenses[0]).not.toHaveProperty('amountCents');
+    expect(readGuestState().groups[0].expenses[0].amountCents).toBe(10050); // the cents copy now wins
+  });
+
+  it('clearGuestState removes everything, including older copies', () => {
     writeGuestState({ groups: [newGroup('Trip')], savedPeople: [], preferences: {} });
+    LEGACY_STATE_KEYS.forEach((key) => localStorage.setItem(key, '{}'));
     clearGuestState();
-    expect(localStorage.getItem(STATE_KEY)).toBeNull();
+    [STATE_KEY, ...LEGACY_STATE_KEYS].forEach((key) => expect(localStorage.getItem(key)).toBeNull());
   });
 
   it('legacyGroup builds a sanitised first group from old data', () => {

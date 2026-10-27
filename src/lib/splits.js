@@ -1,14 +1,7 @@
 // Pure money logic for Expense Splitter. No React or browser APIs, so it is unit-tested.
-// All splitting is done in integer cents, so the parts always add up exactly to the total.
+// Every amount here is integer cents, so the parts of a split always add up exactly to the total.
 const num = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
-
-export const SETTLE_EPSILON = 0.01;
-
-export const toCents = (amount) => Math.round(num(amount) * 100);
-export const fromCents = (cents) => cents / 100;
-
-/** Sums amounts in integer cents, so repeated additions never drift (0.1 + 0.2 style errors). */
-export const sumAmounts = (amounts) => fromCents(amounts.reduce((total, amount) => total + toCents(amount), 0));
+const wholeCents = (value) => (Number.isSafeInteger(value) && value > 0 ? value : 0);
 
 /**
  * Largest-remainder allocation: splits `totalCents` in proportion to `weights`
@@ -29,23 +22,26 @@ export function allocateCents(totalCents, weights) {
   return parts;
 }
 
-/** Split `amount` between `people` (the participants) by: equal | unequal | percentages | shares. */
-export function computeSplit(splitType, amount, people, values = {}) {
+/**
+ * Splits `totalCents` between `people` (the participants) by: equal | unequal | percentages | shares.
+ * `values` holds each person's custom amount in cents (unequal), percentage, or share weight.
+ * Returns { name: cents }.
+ */
+export function computeSplit(splitType, totalCents, people, values = {}) {
   if (!people.length) return {};
-  const total = toCents(amount);
   let cents;
-  if (splitType === 'equal') cents = allocateCents(total, people.map(() => 1));
-  else if (splitType === 'unequal') cents = people.map((p) => toCents(values[p]));
-  else cents = allocateCents(total, people.map((p) => num(values[p])));
-  return Object.fromEntries(people.map((p, i) => [p, fromCents(cents[i])]));
+  if (splitType === 'equal') cents = allocateCents(totalCents, people.map(() => 1));
+  else if (splitType === 'unequal') cents = people.map((p) => wholeCents(values[p]));
+  else cents = allocateCents(totalCents, people.map((p) => num(values[p])));
+  return Object.fromEntries(people.map((p, i) => [p, cents[i]]));
 }
 
 /** Returns an error message when the split inputs are inconsistent, otherwise null. */
-export function validateSplit(splitType, amount, people, values = {}) {
+export function validateSplit(splitType, totalCents, people, values = {}) {
   if (!people.length) return 'Choose at least one person to split between';
   if (splitType === 'unequal') {
-    const sum = people.reduce((total, p) => total + toCents(values[p]), 0);
-    if (sum !== toCents(amount)) return 'Split amounts must add up to the expense total';
+    const sum = people.reduce((total, p) => total + wholeCents(values[p]), 0);
+    if (sum !== totalCents) return 'Split amounts must add up to the expense total';
   }
   if (splitType === 'percentages') {
     const hundredths = people.reduce((total, p) => total + Math.round(num(values[p]) * 100), 0);
@@ -58,42 +54,42 @@ export function validateSplit(splitType, amount, people, values = {}) {
   return null;
 }
 
-/** Net position per person: positive = is owed money, negative = owes money. */
+/** Net position per person in cents: positive balance = is owed money, negative = owes money. */
 export function computeBalances(people, expenses, payments) {
-  const result = Object.fromEntries(people.map((name) => [name, { paid: 0, share: 0, balance: 0 }]));
-  const entry = (name) => (result[name] ??= { paid: 0, share: 0, balance: 0 });
-  const add = (name, key, cents) => {
-    entry(name)[key] = fromCents(toCents(entry(name)[key]) + cents);
-  };
-  const addBalance = (name, cents) => add(name, 'balance', cents);
-  expenses.forEach(({ payer, amount, splitDetails = {} }) => {
-    add(payer, 'paid', toCents(amount));
-    addBalance(payer, toCents(amount));
-    Object.entries(splitDetails).forEach(([name, share]) => {
-      add(name, 'share', toCents(share));
-      addBalance(name, -toCents(share));
+  const blank = () => ({ paidCents: 0, shareCents: 0, balanceCents: 0 });
+  const result = Object.fromEntries(people.map((name) => [name, blank()]));
+  const add = (name, key, cents) => { (result[name] ??= blank())[key] += cents; };
+  expenses.forEach(({ payer, amountCents, splitCents = {} }) => {
+    add(payer, 'paidCents', amountCents);
+    add(payer, 'balanceCents', amountCents);
+    Object.entries(splitCents).forEach(([name, share]) => {
+      add(name, 'shareCents', share);
+      add(name, 'balanceCents', -share);
     });
   });
-  payments.forEach(({ payer, payee, amount }) => {
-    add(payer, 'paid', toCents(amount));
-    addBalance(payer, toCents(amount));
-    addBalance(payee, -toCents(amount));
+  payments.forEach(({ payer, payee, amountCents }) => {
+    add(payer, 'paidCents', amountCents);
+    add(payer, 'balanceCents', amountCents);
+    add(payee, 'balanceCents', -amountCents);
   });
   return result;
 }
 
-/** Greedy minimal-transfer plan: repeatedly match the largest debtor with the largest creditor. */
+/**
+ * Greedy minimal-transfer plan: repeatedly match the largest debtor with the largest creditor.
+ * Balances are exact cents, so anyone not at exactly zero (even one paisa) is part of the plan.
+ */
 export function computeSettlements(balances) {
   const side = (sign) => Object.entries(balances)
-    .filter(([, v]) => sign * v.balance > SETTLE_EPSILON)
-    .map(([name, v]) => ({ name, cents: sign * toCents(v.balance) }))
+    .filter(([, v]) => sign * v.balanceCents > 0)
+    .map(([name, v]) => ({ name, cents: sign * v.balanceCents }))
     .sort((a, b) => b.cents - a.cents);
   const creditors = side(1);
   const debtors = side(-1);
   const result = [];
   while (creditors.length && debtors.length) {
     const cents = Math.min(creditors[0].cents, debtors[0].cents);
-    result.push({ payer: debtors[0].name, payee: creditors[0].name, amount: fromCents(cents) });
+    result.push({ payer: debtors[0].name, payee: creditors[0].name, amountCents: cents });
     creditors[0].cents -= cents;
     debtors[0].cents -= cents;
     if (creditors[0].cents <= 0) creditors.shift();
@@ -102,9 +98,9 @@ export function computeSettlements(balances) {
   return result;
 }
 
-/** True when `amount` is more than the payer currently owes / the payee is owed, so it would flip a balance. */
-export function paymentExceedsOwed(balances, payer, payee, amount) {
-  const owes = Math.max(0, -(balances[payer]?.balance ?? 0));
-  const owed = Math.max(0, balances[payee]?.balance ?? 0);
-  return toCents(amount) > toCents(Math.min(owes, owed));
+/** True when `amountCents` is more than the payer currently owes / the payee is owed, so it would flip a balance. */
+export function paymentExceedsOwed(balances, payer, payee, amountCents) {
+  const owes = Math.max(0, -(balances[payer]?.balanceCents ?? 0));
+  const owed = Math.max(0, balances[payee]?.balanceCents ?? 0);
+  return amountCents > Math.min(owes, owed);
 }

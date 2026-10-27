@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { describeActivity } from './activity';
+import { centsToDecimal } from './money';
 import { normalizeSupabaseUrl } from '../supabase';
 
-const money = (value) => '₹' + value.toFixed(2);
+const money = (cents) => '₹' + centsToDecimal(cents);
 
 describe('describeActivity', () => {
   it('writes readable sentences with the actor and amount', () => {

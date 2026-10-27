@@ -1,4 +1,6 @@
 // Each group has one currency. It changes the symbol and number format only; there is no conversion.
+import { centsToDecimal } from './money';
+
 export const DEFAULT_CURRENCY = 'INR';
 export const CURRENCIES = [
   { value: 'INR', label: 'Indian Rupee (INR)' },
@@ -19,8 +21,9 @@ const formatterFor = (code) => {
   return formatters.get(code);
 };
 
-export const formatCurrency = (value, code = DEFAULT_CURRENCY) => (
-  formatterFor(isCurrency(code) ? code : DEFAULT_CURRENCY).format(Number(value) || 0)
+/** Formats integer cents as currency. The formatter is given an exact decimal string, never a float. */
+export const formatCents = (cents, code = DEFAULT_CURRENCY) => (
+  formatterFor(isCurrency(code) ? code : DEFAULT_CURRENCY).format(centsToDecimal(Number.isSafeInteger(cents) ? cents : 0))
 );
 
 export const currencySymbol = (code = DEFAULT_CURRENCY) => (

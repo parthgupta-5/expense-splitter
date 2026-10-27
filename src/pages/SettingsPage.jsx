@@ -7,7 +7,7 @@ import {
 } from '@ant-design/icons';
 import { useApp } from '../state/AppContext';
 import PageIntro from '../components/PageIntro';
-import { parseBackupText } from '../lib/backup';
+import { parseBackupText, portableGroup } from '../lib/backup';
 import { CURRENCIES, DEFAULT_CURRENCY } from '../lib/currency';
 import { downloadText } from '../lib/download';
 
@@ -32,9 +32,10 @@ export default function SettingsPage() {
 
   const exportBackup = () => {
     const backup = {
+      // Cents fields for this version plus the decimal fields v2.0 reads, so either version can import the file.
       groups: workspace.groups.map(({
         ownerId: _o, role: _r, memberCount: _m, cloud: _c, ...group
-      }) => group),
+      }) => portableGroup(group)),
       savedPeople: workspace.savedPeople,
       preferences: workspace.preferences,
       exportedAt: new Date().toISOString(),

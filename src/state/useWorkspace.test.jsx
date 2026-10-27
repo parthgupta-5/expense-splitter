@@ -67,7 +67,7 @@ describe('useWorkspace (signed in)', () => {
     await waitFor(() => expect(result.current.status).toBe('ready'));
     let kept;
     await act(async () => {
-      kept = await result.current.actions.saveExpense('g1', { id: 'e1', amount: 10, payer: 'Asha', splitDetails: {} });
+      kept = await result.current.actions.saveExpense('g1', { id: 'e1', amountCents: 1000, payer: 'Asha', splitCents: {} });
     });
     expect(kept).toBe(false);
     expect(notify.error).toHaveBeenCalledWith('Could not save the expense: Split amounts must add up to the expense total');

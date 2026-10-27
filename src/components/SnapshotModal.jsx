@@ -1,12 +1,12 @@
 import React from 'react';
 import { Col, Empty, List, Modal, Row, Space, Statistic, Tag, Typography } from 'antd';
 import { ArrowDownOutlined } from '@ant-design/icons';
-import { formatCurrency } from '../lib/currency';
+import { formatCents } from '../lib/currency';
 
 const { Text, Title } = Typography;
 
 export default function SnapshotModal({ snapshot, onClose }) {
-  const money = (value) => formatCurrency(value, snapshot?.currencyCode);
+  const money = (cents) => formatCents(cents, snapshot?.currencyCode);
   return (
     <Modal
       title="Saved split details"
@@ -24,7 +24,7 @@ export default function SnapshotModal({ snapshot, onClose }) {
           </Space>
           <Row gutter={12} className="snapshot-summary">
             <Col span={8}>
-              <Statistic title="Total expenses" value={snapshot.total || 0} precision={2} formatter={money} />
+              <Statistic title="Total expenses" value={snapshot.totalCents || 0} formatter={money} />
             </Col>
             <Col span={8}><Statistic title="People" value={snapshot.people?.length || 0} /></Col>
             <Col span={8}><Statistic title="Suggested payments" value={snapshot.settlements?.length || 0} /></Col>
@@ -39,7 +39,7 @@ export default function SnapshotModal({ snapshot, onClose }) {
                     title={expense.description}
                     description={`${expense.category || 'Other'} · Paid by ${expense.payer}`}
                   />
-                  <Text strong>{money(expense.amount)}</Text>
+                  <Text strong>{money(expense.amountCents)}</Text>
                 </List.Item>
               )}
             />
@@ -50,7 +50,7 @@ export default function SnapshotModal({ snapshot, onClose }) {
               <Text strong>{item.payer}</Text>
               <ArrowDownOutlined className="arrow-icon" />
               <Text strong>{item.payee}</Text>
-              <Text strong className="settlement-amount">{money(item.amount)}</Text>
+              <Text strong className="settlement-amount">{money(item.amountCents)}</Text>
             </div>
           )) : <Text type="secondary">Everyone was settled up.</Text>}
         </>

@@ -1,5 +1,4 @@
 import { PERSON_NAME_MAX } from './limits';
-import { SETTLE_EPSILON } from './splits';
 
 const key = (name) => name.trim().toLowerCase();
 
@@ -27,13 +26,15 @@ export function describeRejected({ duplicates, tooLong }, max = PERSON_NAME_MAX)
 }
 
 function hasActivity(name, expenses, payments) {
-  return expenses.some((e) => e.payer === name || (e.splitDetails && name in e.splitDetails))
+  return expenses.some((e) => e.payer === name || (e.splitCents && name in e.splitCents))
     || payments.some((p) => p.payer === name || p.payee === name);
 }
 
-/** 'blocked' (still owes / is owed), 'confirm' (has history but settled), or 'free'. */
+/**
+ * 'blocked' (still owes / is owed), 'confirm' (has history but settled), or 'free'.
+ * Settled means exactly zero cents, the same rule as the database's guard_person_removal().
+ */
 export function removalStatus(name, balances, expenses, payments) {
-  const balance = balances[name]?.balance ?? 0;
-  if (Math.abs(balance) > SETTLE_EPSILON) return 'blocked';
+  if ((balances[name]?.balanceCents ?? 0) !== 0) return 'blocked';
   return hasActivity(name, expenses, payments) ? 'confirm' : 'free';
 }

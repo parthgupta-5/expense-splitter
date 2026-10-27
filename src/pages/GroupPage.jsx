@@ -16,10 +16,11 @@ import PageIntro from '../components/PageIntro';
 import PaymentForm from '../components/PaymentForm';
 import PeoplePanel from '../components/PeoplePanel';
 import { toCsv } from '../lib/csv';
-import { currencySymbol, formatCurrency } from '../lib/currency';
+import { currencySymbol, formatCents } from '../lib/currency';
 import { downloadText } from '../lib/download';
+import { centsToDecimal, centsToDecimalNumber, sumCents } from '../lib/money';
 import { describeRejected, parseNames, removalStatus } from '../lib/people';
-import { computeBalances, computeSettlements, sumAmounts } from '../lib/splits';
+import { computeBalances, computeSettlements } from '../lib/splits';
 import { makeId, writeLastGroup } from '../lib/storage';
 
 const EMPTY = [];
@@ -60,8 +61,8 @@ export default function GroupPage() {
   // Cheap pure functions over a few hundred items at most, so they simply run on every render.
   const balances = computeBalances(people, expenses, payments);
   const settlements = computeSettlements(balances);
-  const total = sumAmounts(expenses.map((expense) => expense.amount));
-  const formatMoney = (value) => formatCurrency(value, currencyCode);
+  const totalCents = sumCents(expenses.map((expense) => expense.amountCents));
+  const formatMoney = (cents) => formatCents(cents, currencyCode);
   const symbol = currencySymbol(currencyCode);
 
   const expenseForm = useExpenseForm({
@@ -123,7 +124,7 @@ export default function GroupPage() {
       expenses: structuredClone(expenses),
       payments: structuredClone(payments),
       settlements: structuredClone(settlements),
-      total,
+      totalCents,
       currencyCode,
     };
     if (await actions.saveSnapshot(groupId, snapshot)) notify.success('Split saved. Find it under History.');
@@ -133,17 +134,20 @@ export default function GroupPage() {
     const rows = [['Group', 'Date', 'Category', 'Description', 'Paid by', 'Total (' + currencyCode + ')', 'Split details']];
     expenses.forEach((expense) => rows.push([
       group.name, expense.createdAt || '', expense.category || '', expense.description, expense.payer,
-      Number(expense.amount) || 0,
-      Object.entries(expense.splitDetails || {}).map(([name, amount]) => name + ': ' + formatMoney(amount)).join('; '),
+      // Numeric cells, as before the switch to cents, so spreadsheets can sum them.
+      centsToDecimalNumber(expense.amountCents),
+      Object.entries(expense.splitCents || {}).map(([name, cents]) => name + ': ' + formatMoney(cents)).join('; '),
     ]));
-    rows.push([], ['Suggested settlements'], ...settlements.map((item) => [item.payer, 'pays', item.payee, item.amount]));
+    rows.push([], ['Suggested settlements'], ...settlements.map((item) => [
+      item.payer, 'pays', item.payee, centsToDecimalNumber(item.amountCents),
+    ]));
     const safeName = group.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'group';
     downloadText(safeName + '-settlement.csv', 'text/csv;charset=utf-8', toCsv(rows));
   };
 
   const copySummary = async () => {
     const summary = settlements.length
-      ? settlements.map((item) => item.payer + ' pays ' + item.payee + ' ' + formatMoney(item.amount)).join('\n')
+      ? settlements.map((item) => item.payer + ' pays ' + item.payee + ' ' + formatMoney(item.amountCents)).join('\n')
       : 'Everyone is settled up.';
     try {
       await navigator.clipboard.writeText(group.name + '\n' + summary);
@@ -175,7 +179,7 @@ export default function GroupPage() {
         <Row gutter={[13, 13]} className={'stats-row ' + (isScrolled ? 'is-compact' : '')}>
           <Col xs={8}>
             <Card className="stat-card">
-              <Statistic title="Group spend" value={total} precision={2} prefix={symbol} />
+              <Statistic title="Group spend" value={centsToDecimal(totalCents)} precision={2} prefix={symbol} />
             </Card>
           </Col>
           <Col xs={8}><Card className="stat-card"><Statistic title="People" value={people.length} /></Card></Col>
