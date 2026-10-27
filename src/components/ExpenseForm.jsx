@@ -1,10 +1,11 @@
-import React from 'react';
-import { Button, Col, Form, Input, InputNumber, Row, Select, Typography } from 'antd';
-import { CheckOutlined, PlusOutlined } from '@ant-design/icons';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { Sheet } from './group/Sheet';
+import PersonMark from './group/PersonMark';
+import Icon from './group/Icons';
 import { DESCRIPTION_MAX, NOTE_MAX } from '../lib/limits';
+import { computeSplit, sumAmounts } from '../lib/splits';
 
-const { Text, Title } = Typography;
-const CATEGORIES = ['Food & drink', 'Travel', 'Stay', 'Groceries', 'Transport', 'Entertainment', 'Other'];
+export const CATEGORIES = ['Food & drink', 'Travel', 'Stay', 'Groceries', 'Transport', 'Entertainment', 'Other'];
 const SPLIT_TYPES = [
   { label: 'Equal', value: 'equal' },
   { label: 'Custom amounts', value: 'unequal' },
@@ -16,117 +17,266 @@ const EDITOR_TITLES = {
   shares: 'Set shares for each person',
   percentages: 'Set each person’s percentage',
 };
+const PLACES = { unequal: 2, percentages: 2, shares: 3 };
 
-function SplitEditor({ splitType, participants, values, currencySymbol, onChange }) {
+/** Keeps only well-formed decimal text, so the field can never hold something the maths would misread. */
+const decimal = (raw, places) => {
+  const text = raw.replace(/,/g, '');
+  const pattern = new RegExp('^\\d*\\.?\\d{0,' + places + '}$');
+  return pattern.test(text) ? text : null;
+};
+
+function Field({ id, label, error, hint, children }) {
   return (
-    <div className="split-editor">
-      <div className="split-editor-title"><Text strong>{EDITOR_TITLES[splitType]}</Text></div>
-      <Row gutter={[12, 4]}>
-        {participants.map((person) => (
-          <Col xs={12} sm={8} md={6} key={person}>
-            <Form.Item label={person}>
-              <InputNumber
-                min={0}
-                precision={splitType === 'percentages' ? 2 : 3}
-                suffix={{ percentages: '%', shares: 'shares' }[splitType]}
-                prefix={splitType === 'unequal' ? currencySymbol : undefined}
-                className="full-width"
-                value={values[person] ?? (splitType === 'unequal' ? undefined : 0)}
-                onChange={(value) => onChange(person, value)}
-              />
-            </Form.Item>
-          </Col>
-        ))}
-      </Row>
+    <div className="gp-field">
+      <label className="gp-label" htmlFor={id}>{label}</label>
+      {children}
+      {hint && !error && <p className="gp-hint" id={id + '-hint'}>{hint}</p>}
+      {error && <p className="gp-error" id={id + '-error'}>{error}</p>}
     </div>
   );
 }
 
-export default function ExpenseForm({ expenseForm, people, currencySymbol }) {
+function SplitEditor({
+  splitType, participants, values, currencySymbol, formatMoney, total, onChange,
+}) {
+  const unit = { percentages: '%', shares: 'shares', unequal: currencySymbol }[splitType];
+  let summary;
+  let balanced = false;
+  if (splitType === 'unequal') {
+    const assigned = sumAmounts(participants.map((person) => values[person]));
+    balanced = total > 0 && Math.round(assigned * 100) === Math.round(total * 100);
+    summary = formatMoney(assigned) + ' of ' + formatMoney(total) + ' assigned';
+  } else if (splitType === 'percentages') {
+    const assigned = participants.reduce((sum, person) => sum + Math.round((Number(values[person]) || 0) * 100), 0);
+    balanced = assigned === 10000;
+    summary = assigned / 100 + '% of 100% assigned';
+  } else {
+    const assigned = participants.reduce((sum, person) => sum + (Number(values[person]) || 0), 0);
+    balanced = assigned > 0;
+    summary = assigned + (assigned === 1 ? ' share' : ' shares') + ' in total';
+  }
+  return (
+    <fieldset className="gp-split-editor">
+      <legend className="gp-label">{EDITOR_TITLES[splitType]}</legend>
+      {participants.map((person) => (
+        <label className="gp-split-row" key={person}>
+          <PersonMark name={person} size={28} />
+          <span className="gp-split-name">{person}</span>
+          <span className="gp-input-wrap is-small">
+            {splitType === 'unequal' && <span className="gp-affix" aria-hidden="true">{unit}</span>}
+            <input
+              className="gp-input is-number"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="0"
+              aria-label={person + ' ' + { unequal: 'amount', shares: 'shares', percentages: 'percentage' }[splitType]}
+              value={values[person] ?? ''}
+              onChange={(event) => {
+                const next = decimal(event.target.value, PLACES[splitType]);
+                if (next !== null) onChange(person, next);
+              }}
+            />
+            {splitType !== 'unequal' && <span className="gp-affix is-after" aria-hidden="true">{unit}</span>}
+          </span>
+        </label>
+      ))}
+      <p className={'gp-meter' + (balanced ? ' is-balanced' : '')} role="status">
+        {balanced && <Icon name="check" size={16} />}{summary}
+      </p>
+    </fieldset>
+  );
+}
+
+function EqualPreview({ amount, participants, formatMoney }) {
+  const total = Number(amount);
+  if (!participants.length || !Number.isFinite(total) || total < 0.01) return null;
+  const parts = Object.values(computeSplit('equal', total, participants));
+  const low = Math.min(...parts);
+  const high = Math.max(...parts);
+  return (
+    <p className="gp-meter is-balanced" role="status">
+      <Icon name="check" size={16} />
+      {low === high ? formatMoney(low) + ' each' : 'About ' + formatMoney(low) + ' each, to the cent'}
+    </p>
+  );
+}
+
+/** Category and note. Starts open when editing an expense that already has either (the sheet remounts per opening). */
+function MoreDetails({ uid, values, setField }) {
+  const [open, setOpen] = useState(() => Boolean(values.note) || values.category !== 'Other');
+  return (
+    <details className="gp-more" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary>More details</summary>
+      <Field id={uid + 'category'} label="Category">
+        <select
+          id={uid + 'category'}
+          className="gp-input gp-select"
+          value={values.category}
+          onChange={(event) => setField('category', event.target.value)}
+        >
+          {CATEGORIES.map((value) => <option key={value} value={value}>{value}</option>)}
+        </select>
+      </Field>
+      <Field id={uid + 'note'} label="Note (optional)">
+        <input
+          id={uid + 'note'}
+          className="gp-input"
+          placeholder="Add context for the group"
+          maxLength={NOTE_MAX}
+          value={values.note}
+          onChange={(event) => setField('note', event.target.value)}
+        />
+      </Field>
+    </details>
+  );
+}
+
+/** The add / edit expense sheet. Fields are plain controls; the sheet supplies the dialog behaviour. */
+export default function ExpenseSheet({
+  open, onClose, expenseForm, people, currencySymbol, formatMoney,
+}) {
   const {
-    form, splitType, splitValues, participants, editingId, saving,
-    reset, submit, changeSplitType, setSplitValue, changeParticipants,
+    values, errors, splitType, splitValues, participants, editingId, saving,
+    reset, submit, setField, changeSplitType, setSplitValue, changeParticipants,
   } = expenseForm;
-  const options = people.map((person) => ({ label: person, value: person }));
   const editing = editingId !== null;
+  const uid = useId();
+  const amountRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    // Start on the amount, unless the person has already moved into the form themselves.
+    const timer = setTimeout(() => {
+      const form = document.getElementById(uid + 'form');
+      if (!form?.contains(document.activeElement)) amountRef.current?.focus();
+    }, 80);
+    return () => clearTimeout(timer);
+    // Only when the sheet opens: later typing must not reopen or refocus anything.
+  }, [open, editingId, uid]);
+
+  const total = Number(values.amount) || 0;
+  const toggleParticipant = (person) => changeParticipants(
+    participants.includes(person) ? participants.filter((name) => name !== person) : people.filter((name) => name === person || participants.includes(name)),
+  );
+
+  const onSubmit = async (event) => {
+    event.preventDefault();
+    const saved = await submit();
+    if (saved) onClose(saved);
+  };
+
+  const footer = (
+    <div className="gp-sheet-actions">
+      <button type="button" className="gp-button" onClick={editing ? () => onClose() : reset}>
+        {editing ? 'Cancel editing' : 'Clear'}
+      </button>
+      <button type="submit" form={uid + 'form'} className="gp-button is-primary is-wide" disabled={saving}>
+        {saving ? 'Saving…' : editing ? 'Save changes' : 'Add expense'}
+        {total > 0 && !saving && <span className="gp-button-amount"> · {formatMoney(total)}</span>}
+      </button>
+    </div>
+  );
 
   return (
-    <>
-      <div className="section-heading">
-        <div>
-          <Text className="eyebrow">GROUP WORKSPACE</Text>
-          <Title level={3}>{editing ? 'Edit expense' : 'Add an expense'}</Title>
-        </div>
-        <div className="step-pill">01 <span>·</span> ACTIVITY</div>
-      </div>
-      <Form form={form} layout="vertical" onFinish={submit} className="expense-form">
-        <Row gutter={16}>
-          <Col xs={24} md={7}>
-            <Form.Item
-              name="description"
-              label="What was it for?"
-              rules={[{ required: true, whitespace: true, message: 'Add a short description' }]}
-            >
-              <Input size="large" placeholder="Dinner, groceries, taxi…" maxLength={DESCRIPTION_MAX} showCount />
-            </Form.Item>
-          </Col>
-          <Col xs={12} sm={8} md={5}>
-            <Form.Item name="payer" label="Who paid?" rules={[{ required: true, message: 'Choose who paid' }]}>
-              <Select size="large" placeholder="Select a person" options={options} />
-            </Form.Item>
-          </Col>
-          <Col xs={12} sm={8} md={4}>
-            <Form.Item name="amount" label="Total amount" rules={[{ required: true, message: 'Enter the total' }]}>
-              <InputNumber
-                size="large" min={0.01} precision={2} prefix={currencySymbol} placeholder="0.00" className="full-width"
-              />
-            </Form.Item>
-          </Col>
-          <Col xs={12} sm={8} md={4}>
-            <Form.Item name="category" label="Category" initialValue="Other">
-              <Select size="large" options={CATEGORIES.map((value) => ({ label: value, value }))} />
-            </Form.Item>
-          </Col>
-          <Col xs={12} sm={8} md={4}>
-            <Form.Item label="Split method">
-              <Select size="large" value={splitType} onChange={changeSplitType} options={SPLIT_TYPES} />
-            </Form.Item>
-          </Col>
-        </Row>
-        <Form.Item
-          label="Split between"
-          validateStatus={participants.length ? undefined : 'error'}
-          help={participants.length ? undefined : 'Choose at least one person'}
-        >
-          <Select
-            mode="multiple"
-            size="large"
-            value={participants}
-            onChange={changeParticipants}
-            options={options}
-            placeholder="Everyone"
-            maxTagCount="responsive"
+    <Sheet open={open} onClose={() => onClose()} title={editing ? 'Edit expense' : 'Add an expense'} footer={footer}>
+      <form id={uid + 'form'} className="gp-form" onSubmit={onSubmit} noValidate>
+        <Field id={uid + 'amount'} label="Total amount" error={errors.amount}>
+          <span className="gp-input-wrap is-amount">
+            <span className="gp-affix" aria-hidden="true">{currencySymbol}</span>
+            <input
+              id={uid + 'amount'}
+              ref={amountRef}
+              className="gp-input is-number is-big"
+              inputMode="decimal"
+              autoComplete="off"
+              placeholder="0.00"
+              aria-invalid={Boolean(errors.amount)}
+              aria-describedby={errors.amount ? uid + 'amount-error' : undefined}
+              value={values.amount}
+              onChange={(event) => {
+                const next = decimal(event.target.value, 2);
+                if (next !== null) setField('amount', next);
+              }}
+            />
+          </span>
+        </Field>
+        <Field id={uid + 'description'} label="What was it for?" error={errors.description}>
+          <input
+            id={uid + 'description'}
+            className="gp-input"
+            placeholder="Dinner, groceries, taxi…"
+            maxLength={DESCRIPTION_MAX}
+            aria-invalid={Boolean(errors.description)}
+            aria-describedby={errors.description ? uid + 'description-error' : undefined}
+            value={values.description}
+            onChange={(event) => setField('description', event.target.value)}
           />
-        </Form.Item>
-        <Form.Item name="note" label="Note (optional)">
-          <Input placeholder="Add context for the group" maxLength={NOTE_MAX} />
-        </Form.Item>
-        {splitType !== 'equal' && (
-          <SplitEditor
-            splitType={splitType}
-            participants={participants}
-            values={splitValues}
-            currencySymbol={currencySymbol}
-            onChange={setSplitValue}
-          />
-        )}
-        <div className="form-actions">
-          <Button onClick={reset}>{editing ? 'Cancel editing' : 'Clear'}</Button>
-          <Button type="primary" htmlType="submit" loading={saving} icon={editing ? <CheckOutlined /> : <PlusOutlined />}>
-            {editing ? 'Save changes' : 'Add expense'}
-          </Button>
-        </div>
-      </Form>
-    </>
+        </Field>
+
+        <fieldset className="gp-fieldset" aria-describedby={errors.payer ? uid + 'payer-error' : undefined}>
+          <legend className="gp-label">Who paid?</legend>
+          <div className="gp-chips" role="radiogroup" aria-label="Who paid?">
+            {people.map((person) => (
+              <label className="gp-chip" key={person}>
+                <input
+                  type="radio"
+                  name={uid + 'payer'}
+                  checked={values.payer === person}
+                  onChange={() => setField('payer', person)}
+                />
+                <span><PersonMark name={person} size={22} />{person}</span>
+              </label>
+            ))}
+          </div>
+          {errors.payer && <p className="gp-error" id={uid + 'payer-error'}>{errors.payer}</p>}
+        </fieldset>
+
+        <fieldset className="gp-fieldset">
+          <legend className="gp-label">Split between</legend>
+          <div className="gp-chips">
+            {people.map((person) => (
+              <label className="gp-chip" key={person}>
+                <input type="checkbox" checked={participants.includes(person)} onChange={() => toggleParticipant(person)} />
+                <span><PersonMark name={person} size={22} />{person}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <fieldset className="gp-fieldset">
+          <legend className="gp-label">Split method</legend>
+          <div className="gp-segmented" role="radiogroup" aria-label="Split method">
+            {SPLIT_TYPES.map((item) => (
+              <label className="gp-segment" key={item.value}>
+                <input
+                  type="radio"
+                  name={uid + 'split'}
+                  checked={splitType === item.value}
+                  onChange={() => changeSplitType(item.value)}
+                />
+                <span>{item.label}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        {splitType === 'equal'
+          ? <EqualPreview amount={values.amount} participants={participants} formatMoney={formatMoney} />
+          : (
+            <SplitEditor
+              splitType={splitType}
+              participants={participants}
+              values={splitValues}
+              currencySymbol={currencySymbol}
+              formatMoney={formatMoney}
+              total={total}
+              onChange={setSplitValue}
+            />
+          )}
+        {errors.split && <p className="gp-error" role="alert">{errors.split}</p>}
+
+        <MoreDetails uid={uid} values={values} setField={setField} />
+      </form>
+    </Sheet>
   );
 }

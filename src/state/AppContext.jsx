@@ -2,7 +2,7 @@ import React, {
   createContext, useCallback, useContext, useEffect, useMemo, useState,
 } from 'react';
 import { App as AntApp, ConfigProvider } from 'antd';
-import { readTheme, saveTheme } from '../lib/storage';
+import { readTheme, readThemeChoice, saveTheme } from '../lib/storage';
 import { buildTheme, requiredMark } from '../theme';
 import { useAuth } from './useAuth';
 import { useWorkspace } from './useWorkspace';
@@ -25,7 +25,7 @@ function AppState({ children, dark, setDark }) {
 
   const openAuth = useCallback((mode = 'signup') => setAuthDialog({ open: true, mode }), []);
   const closeAuth = useCallback(() => setAuthDialog((current) => ({ ...current, open: false })), []);
-  const toggleDark = useCallback(() => setDark((value) => !value), [setDark]);
+  const toggleDark = useCallback(() => setDark((value) => { saveTheme(!value); return !value; }), [setDark]);
 
   const value = useMemo(() => ({
     auth,
@@ -49,9 +49,16 @@ function AppState({ children, dark, setDark }) {
 export function AppProvider({ children }) {
   const [dark, setDark] = useState(readTheme);
   useEffect(() => {
-    saveTheme(dark);
     document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   }, [dark]);
+  // Without an explicit choice, follow the device when its appearance changes.
+  useEffect(() => {
+    const query = window.matchMedia?.('(prefers-color-scheme: dark)');
+    if (!query?.addEventListener) return undefined;
+    const follow = (event) => { if (!readThemeChoice()) setDark(event.matches); };
+    query.addEventListener('change', follow);
+    return () => query.removeEventListener('change', follow);
+  }, []);
 
   return (
     <ConfigProvider form={{ requiredMark }} theme={buildTheme(dark)}>

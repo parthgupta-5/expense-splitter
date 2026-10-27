@@ -1,12 +1,13 @@
 import React, { Suspense, lazy, useEffect } from 'react';
 import {
-  Link, Navigate, Route, Routes, useLocation, useNavigate, useParams,
+  Link, Navigate, Route, Routes, useLocation, useMatch, useNavigate, useParams,
 } from 'react-router';
 import {
   Alert, Button, Layout, Result, Spin,
 } from 'antd';
 import { useApp } from './state/AppContext';
 import TopBar from './components/TopBar';
+import GroupSkeleton from './components/group/GroupSkeleton';
 import { readLastGroup } from './lib/storage';
 
 // Pages and dialogs load on demand, so the first download only contains what the current screen needs.
@@ -57,6 +58,8 @@ export default function App() {
   } = useApp();
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const isGroupRoute = Boolean(useMatch('/groups/:groupId'));
+  const pending = isGroupRoute ? <GroupSkeleton /> : loading;
 
   // The password-reset email link signs the user in; send them to the page where they choose a new password.
   useEffect(() => {
@@ -67,7 +70,17 @@ export default function App() {
 
   let body;
   if (!auth.ready || workspace.status === 'loading') {
-    body = loading;
+    body = pending;
+  } else if (workspace.status === 'error' && isGroupRoute) {
+    body = (
+      <div className="gp">
+        <div className="gp-empty" role="alert">
+          <h1 className="gp-title">Your account data could not be loaded</h1>
+          <p className="gp-empty-text">Check your internet connection. Nothing has been lost.</p>
+          <button type="button" className="gp-button is-primary" onClick={() => window.location.reload()}>Try again</button>
+        </div>
+      </div>
+    );
   } else if (workspace.status === 'error') {
     body = (
       <Alert
@@ -80,7 +93,7 @@ export default function App() {
     );
   } else {
     body = (
-      <Suspense fallback={loading}>
+      <Suspense fallback={pending}>
         <Routes>
           <Route path="/" element={<HomeRedirect />} />
           <Route path="/groups" element={<GroupsPage />} />
@@ -97,10 +110,10 @@ export default function App() {
   }
 
   return (
-    <Layout className="app-layout">
+    <Layout className={'app-layout' + (isGroupRoute ? ' is-group' : '')}>
       <a className="skip-link" href="#main">Skip to content</a>
       <TopBar />
-      <Content className="content" id="main" tabIndex={-1}>{body}</Content>
+      <Content className={'content' + (isGroupRoute ? ' content-group' : '')} id="main" tabIndex={-1}>{body}</Content>
       <Suspense fallback={null}>
         {authDialog.open && <AuthModal />}
         {groupDialogOpen && <GroupModal />}

@@ -1,40 +1,47 @@
 import React from 'react';
-import { Button, Input, Space, Tag, Typography } from 'antd';
-import { PlusOutlined } from '@ant-design/icons';
+import Icon from './group/Icons';
+import PersonMark from './group/PersonMark';
 
-const { Title } = Typography;
-const TAG_COLORS = ['blue', 'purple', 'cyan', 'gold', 'green'];
-
-export default function PeoplePanel({ groupName, people, value, onChange, onAdd, onRemove }) {
+/** Add names (comma separated) and list the people already in the group, each with a remove button. */
+export default function PeoplePanel({
+  people, value, onChange, onAdd, onRemove, autoFocus = false, inputLabel = 'Add participant name',
+}) {
   return (
-    <section className="section-card people-card">
-      <div className="section-heading">
-        <div><Title level={4}>People in {groupName}</Title></div>
-        <Tag>{people.length} {people.length === 1 ? 'person' : 'people'}</Tag>
-      </div>
-      <Space.Compact className="add-person">
-        <Input
+    <div className="gp-people">
+      <form
+        className="gp-add-person"
+        onSubmit={(event) => { event.preventDefault(); onAdd(); }}
+      >
+        <input
+          className="gp-input"
           maxLength={400}
           value={value}
+          autoFocus={autoFocus}
           onChange={(event) => onChange(event.target.value)}
-          onPressEnter={() => onAdd()}
-          placeholder="Add a name or several names separated by commas"
-          aria-label="Add participant name"
+          placeholder="Add a name, or several separated by commas"
+          aria-label={inputLabel}
+          autoComplete="off"
         />
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => onAdd()}>Add people</Button>
-      </Space.Compact>
-      <div className="people-list">
-        {people.map((name, index) => (
-          <Tag
-            key={name}
-            closable
-            onClose={(event) => { event.preventDefault(); onRemove(name); }}
-            color={TAG_COLORS[index % TAG_COLORS.length]}
-          >
-            {name}
-          </Tag>
-        ))}
-      </div>
-    </section>
+        <button type="submit" className="gp-button is-primary">Add people</button>
+      </form>
+      {people.length > 0 && (
+        <ul className="gp-plain-list gp-people-list" aria-label="People in this group">
+          {people.map((name) => (
+            <li key={name}>
+              <PersonMark name={name} size={32} />
+              <span className="gp-people-name">{name}</span>
+              <button
+                type="button"
+                className="gp-icon-button is-danger-outline"
+                onClick={() => onRemove(name)}
+                aria-label={'Remove ' + name}
+              >
+                <Icon name="close" size={18} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

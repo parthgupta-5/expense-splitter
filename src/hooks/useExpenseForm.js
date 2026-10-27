@@ -1,14 +1,19 @@
 import { useState } from 'react';
-import { Form } from 'antd';
 import { computeSplit, validateSplit } from '../lib/splits';
 import { makeId } from '../lib/storage';
 
+const EMPTY_VALUES = {
+  description: '', payer: '', amount: '', category: 'Other', note: '',
+};
+
 /**
- * State and handlers for adding/editing an expense (split type, participants, per-person values).
- * `onSave(expense)` persists it and resolves to true when it was kept.
+ * State and handlers for adding/editing an expense (fields, split type, participants, per-person values).
+ * `onSave(expense)` persists it and resolves to true when it was kept. `submit()` resolves to the saved
+ * expense id, or null when validation failed or the save was refused.
  */
 export function useExpenseForm({ people, expenses, onSave, notify }) {
-  const [form] = Form.useForm();
+  const [values, setValues] = useState(EMPTY_VALUES);
+  const [errors, setErrors] = useState({});
   const [splitType, setSplitType] = useState('equal');
   const [splitValues, setSplitValues] = useState({});
   const [participantSel, setParticipantSel] = useState(null); // null means "everyone"
@@ -18,21 +23,45 @@ export function useExpenseForm({ people, expenses, onSave, notify }) {
   const participants = (participantSel ?? people).filter((name) => people.includes(name));
 
   const reset = () => {
-    form.resetFields();
+    setValues(EMPTY_VALUES);
+    setErrors({});
     setSplitType('equal');
     setSplitValues({});
     setParticipantSel(null);
     setEditingId(null);
   };
 
-  const changeSplitType = (value) => { setSplitType(value); setSplitValues({}); };
-  const setSplitValue = (person, value) => setSplitValues((current) => ({ ...current, [person]: value }));
-  const changeParticipants = (value) => setParticipantSel(value.length === people.length ? null : value);
+  const setField = (field, value) => {
+    setValues((current) => ({ ...current, [field]: value }));
+    setErrors((current) => (current[field] ? { ...current, [field]: undefined } : current));
+  };
+  const changeSplitType = (value) => { setSplitType(value); setSplitValues({}); setErrors((c) => ({ ...c, split: undefined })); };
+  const setSplitValue = (person, value) => {
+    setSplitValues((current) => ({ ...current, [person]: value }));
+    setErrors((c) => (c.split ? { ...c, split: undefined } : c));
+  };
+  const changeParticipants = (value) => {
+    setParticipantSel(value.length === people.length ? null : value);
+    setErrors((c) => (c.split ? { ...c, split: undefined } : c));
+  };
 
-  const submit = async (values) => {
+  const validate = () => {
+    const found = {};
+    if (!values.description.trim()) found.description = 'Add a short description';
+    if (!values.payer || !people.includes(values.payer)) found.payer = 'Choose who paid';
     const amount = Number(values.amount);
-    const problem = validateSplit(splitType, amount, participants, splitValues);
-    if (problem) { notify.error(problem); return; }
+    if (!values.amount || !Number.isFinite(amount) || amount < 0.01) found.amount = 'Enter the total';
+    if (!found.amount) {
+      const problem = validateSplit(splitType, amount, participants, splitValues);
+      if (problem) found.split = problem;
+    } else if (!participants.length) found.split = 'Choose at least one person to split between';
+    setErrors(found);
+    return found;
+  };
+
+  const submit = async () => {
+    if (Object.keys(validate()).length) return null;
+    const amount = Number(values.amount);
     const previous = editingId === null ? null : expenses.find((item) => item.id === editingId);
     const now = new Date().toISOString();
     const expense = {
@@ -52,14 +81,15 @@ export function useExpenseForm({ people, expenses, onSave, notify }) {
     setSaving(true);
     const kept = await onSave(expense);
     setSaving(false);
-    if (!kept) return;
+    if (!kept) return null;
     notify.success(previous ? 'Expense updated' : 'Expense added');
     reset();
+    return expense.id;
   };
 
   const edit = (id) => {
     const expense = expenses.find((item) => item.id === id);
-    if (!expense) return;
+    if (!expense) return false;
     const details = expense.splitDetails || {};
     const shares = Object.values(details);
     const wasEqual = shares.length > 0
@@ -81,18 +111,19 @@ export function useExpenseForm({ people, expenses, onSave, notify }) {
     } else if (type === 'shares') {
       setSplitValues(Object.fromEntries(people.map((person) => [person, details[person] || 0])));
     } else setSplitValues({ ...details });
-    form.setFieldsValue({
+    setErrors({});
+    setValues({
       description: expense.description,
-      payer: people.includes(expense.payer) ? expense.payer : undefined,
-      amount: expense.amount,
+      payer: people.includes(expense.payer) ? expense.payer : '',
+      amount: String(expense.amount),
       category: expense.category || 'Other',
       note: expense.note || '',
     });
-    document.getElementById('add-expense')?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    return true;
   };
 
   return {
-    form, splitType, splitValues, participants, editingId, saving,
-    reset, submit, edit, changeSplitType, setSplitValue, changeParticipants,
+    values, errors, splitType, splitValues, participants, editingId, saving,
+    reset, submit, edit, setField, changeSplitType, setSplitValue, changeParticipants,
   };
 }

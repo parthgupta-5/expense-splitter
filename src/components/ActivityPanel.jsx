@@ -1,60 +1,61 @@
-import React from 'react';
-import { Button, Space, Tabs, Tag, Tooltip, Typography } from 'antd';
-import { CopyOutlined, DownloadOutlined, SaveOutlined } from '@ant-design/icons';
-import BalancesPanel from './BalancesPanel';
+import React, { useId, useRef, useState } from 'react';
 import ExpensesTable from './ExpensesTable';
 import PaymentsTable from './PaymentsTable';
 
-const { Text, Title } = Typography;
+const TABS = ['expenses', 'payments'];
 
-const countLabel = (label, count) => <span>{label} <Tag bordered={false}>{count}</Tag></span>;
-
+/** The ledger: expenses and payments behind a two-way switch (a real tablist with arrow-key support). */
 export default function ActivityPanel({
-  expenses, payments, balances, settlements, formatMoney,
-  onEditExpense, onDeleteExpense, onDeletePayment, onSaveSplit, onExportCsv, onCopySummary,
+  expenses, payments, formatMoney, freshId, onAdd, onEditExpense, onDeleteExpense, onDeletePayment,
 }) {
-  const empty = !expenses.length && !payments.length;
+  const uid = useId();
+  const [tab, setTab] = useState('expenses');
+  const refs = useRef({});
+  const counts = { expenses: expenses.length, payments: payments.length };
+
+  const onKeyDown = (event) => {
+    const step = { ArrowRight: 1, ArrowLeft: -1 }[event.key];
+    if (!step) return;
+    event.preventDefault();
+    const next = TABS[(TABS.indexOf(tab) + step + TABS.length) % TABS.length];
+    setTab(next);
+    refs.current[next]?.focus();
+  };
+
   return (
-    <section className="section-card activity-card">
-      <div className="section-heading">
-        <div>
-          <Text className="eyebrow">THE FULL PICTURE</Text>
-          <Title level={3}>Group activity</Title>
-        </div>
-        <Space wrap>
-          <Tooltip title={empty ? 'Add an expense or payment first' : 'Save a snapshot of this split'}>
-            <Button icon={<SaveOutlined />} disabled={empty} onClick={onSaveSplit}>Save split</Button>
-          </Tooltip>
-          <Button icon={<DownloadOutlined />} onClick={onExportCsv}>Export CSV</Button>
-          <Button icon={<CopyOutlined />} onClick={onCopySummary}>Copy settlement</Button>
-        </Space>
+    <section className="gp-ledger-section" aria-label="Group activity">
+      <div className="gp-tabs" role="tablist" aria-label="Group activity" onKeyDown={onKeyDown}>
+        {TABS.map((key) => (
+          <button
+            key={key}
+            ref={(node) => { refs.current[key] = node; }}
+            type="button"
+            role="tab"
+            id={uid + key}
+            aria-selected={tab === key}
+            aria-controls={uid + key + '-panel'}
+            tabIndex={tab === key ? 0 : -1}
+            className="gp-tab"
+            onClick={() => setTab(key)}
+          >
+            {key === 'expenses' ? 'Expenses' : 'Payments'} <span className="gp-count">{counts[key]}</span>
+          </button>
+        ))}
       </div>
-      <Tabs
-        items={[
-          {
-            key: 'expenses',
-            label: countLabel('Expenses', expenses.length),
-            children: (
-              <ExpensesTable
-                expenses={expenses}
-                formatMoney={formatMoney}
-                onEdit={onEditExpense}
-                onDelete={onDeleteExpense}
-              />
-            ),
-          },
-          {
-            key: 'balances',
-            label: countLabel('Balances', Object.keys(balances).length),
-            children: <BalancesPanel balances={balances} settlements={settlements} formatMoney={formatMoney} />,
-          },
-          {
-            key: 'payments',
-            label: countLabel('Payments', payments.length),
-            children: <PaymentsTable payments={payments} formatMoney={formatMoney} onDelete={onDeletePayment} />,
-          },
-        ]}
-      />
+      <div role="tabpanel" id={uid + tab + '-panel'} aria-labelledby={uid + tab}>
+        {tab === 'expenses' ? (
+          <ExpensesTable
+            expenses={expenses}
+            formatMoney={formatMoney}
+            freshId={freshId}
+            onAdd={onAdd}
+            onEdit={onEditExpense}
+            onDelete={onDeleteExpense}
+          />
+        ) : (
+          <PaymentsTable payments={payments} formatMoney={formatMoney} freshId={freshId} onDelete={onDeletePayment} />
+        )}
+      </div>
     </section>
   );
 }

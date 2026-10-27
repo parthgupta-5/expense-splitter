@@ -101,7 +101,17 @@ export function clearGuestState() {
   [STATE_KEY, 'expenseSplitterStateV1', LEGACY_SYNC_META_KEY, LEGACY_LAST_USER_KEY].forEach(remove);
 }
 
-export const readTheme = () => read(THEME_KEY) === 'dark';
+/** The explicit choice the person made ('dark' or 'light'), or null when they follow the device. */
+export const readThemeChoice = () => {
+  const value = read(THEME_KEY);
+  return value === 'dark' || value === 'light' ? value : null;
+};
+/** Dark when chosen, otherwise whatever the device prefers. */
+export const readTheme = () => {
+  const choice = readThemeChoice();
+  if (choice) return choice === 'dark';
+  try { return Boolean(window.matchMedia?.('(prefers-color-scheme: dark)').matches); } catch { return false; }
+};
 export const saveTheme = (dark) => write(THEME_KEY, dark ? 'dark' : 'light');
 
 export const readLastGroup = () => read(LAST_GROUP_KEY);

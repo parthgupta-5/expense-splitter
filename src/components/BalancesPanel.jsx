@@ -1,60 +1,55 @@
-import React from 'react';
-import { Avatar, Space, Table, Tag, Typography } from 'antd';
-import { ArrowDownOutlined, CheckCircleFilled } from '@ant-design/icons';
+import React, { useState } from 'react';
+import PersonMark from './group/PersonMark';
 import { SETTLE_EPSILON } from '../lib/splits';
 
-const { Text, Title } = Typography;
+function describe(balance) {
+  if (balance > SETTLE_EPSILON) return { dir: 'owed', label: 'is owed', sign: '+' };
+  if (balance < -SETTLE_EPSILON) return { dir: 'owes', label: 'owes', sign: '−' };
+  return { dir: 'square', label: 'settled', sign: '' };
+}
 
-export default function BalancesPanel({ balances, settlements, formatMoney }) {
-  const columns = [
-    {
-      title: 'Person',
-      dataIndex: 'name',
-      key: 'name',
-      render: (name) => (
-        <Space><Avatar size="small">{name.slice(0, 1).toUpperCase()}</Avatar><Text strong>{name}</Text></Space>
-      ),
-    },
-    { title: 'Their share', dataIndex: 'share', key: 'share', align: 'right', render: formatMoney },
-    { title: 'Paid', dataIndex: 'paid', key: 'paid', align: 'right', render: formatMoney },
-    {
-      title: 'Net balance',
-      dataIndex: 'balance',
-      key: 'balance',
-      align: 'right',
-      render: (value) => {
-        const tone = value > SETTLE_EPSILON ? 'positive' : value < -SETTLE_EPSILON ? 'negative' : '';
-        return <Text className={tone} strong>{value > SETTLE_EPSILON ? '+' : ''}{formatMoney(value)}</Text>;
-      },
-    },
-  ];
-
+/**
+ * Who is owed and who owes, one hairline row per person. Direction is written (label and sign), drawn
+ * (bar side and hatching) and coloured, so no single channel carries it alone.
+ */
+export default function BalancesPanel({ balances, formatMoney }) {
+  const [openName, setOpenName] = useState(null);
+  const entries = Object.entries(balances);
+  const largest = Math.max(SETTLE_EPSILON, ...entries.map(([, values]) => Math.abs(values.balance)));
   return (
-    <>
-      <Table
-        size="middle"
-        rowKey="name"
-        columns={columns}
-        dataSource={Object.entries(balances).map(([name, values]) => ({ name, ...values }))}
-        pagination={false}
-      />
-      {settlements.length > 0 && (
-        <div className="settlement-box">
-          <div className="settlement-heading">
-            <div><Title level={5}>Settle up</Title></div>
-            <Tag color="green" icon={<CheckCircleFilled />}>{settlements.length} suggested payments</Tag>
-          </div>
-          {settlements.map((item, index) => (
-            <div className="settlement-row" key={item.payer + item.payee + index}>
-              <Avatar size="small" className="settlement-avatar">{item.payer.slice(0, 1).toUpperCase()}</Avatar>
-              <Text strong>{item.payer}</Text>
-              <ArrowDownOutlined className="arrow-icon" />
-              <Text strong>{item.payee}</Text>
-              <Text strong className="settlement-amount">{formatMoney(item.amount)}</Text>
-            </div>
-          ))}
-        </div>
-      )}
-    </>
+    <ul className="gp-plain-list gp-balances" aria-label="Balances">
+      {entries.map(([name, values]) => {
+        const state = describe(values.balance);
+        const open = openName === name;
+        const width = Math.round((Math.abs(values.balance) / largest) * 100);
+        return (
+          <li key={name} className="gp-balance" data-dir={state.dir}>
+            <button
+              type="button"
+              className="gp-balance-main"
+              aria-expanded={open}
+              onClick={() => setOpenName(open ? null : name)}
+            >
+              <PersonMark name={name} size={32} />
+              <span className="gp-balance-name">{name}</span>
+              <span className="gp-balance-figure">
+                <span className="gp-balance-label">{state.label}</span>
+                {state.dir !== 'square' && (
+                  <span className="gp-amount">{state.sign}{formatMoney(Math.abs(values.balance))}</span>
+                )}
+              </span>
+            </button>
+            <span className="gp-track" aria-hidden="true">
+              <span className="gp-track-fill" style={{ width: width / 2 + '%' }} />
+            </span>
+            {open && (
+              <p className="gp-balance-detail">
+                Paid {formatMoney(values.paid)} · Share {formatMoney(values.share)}
+              </p>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }

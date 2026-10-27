@@ -1,35 +1,51 @@
-import React from 'react';
-import { Button, Empty, Popconfirm, Table, Typography } from 'antd';
-import { DeleteOutlined, SwapOutlined } from '@ant-design/icons';
+import React, { useState } from 'react';
+import Icon from './group/Icons';
+import { StitchRow } from './PaymentForm';
 
-const { Text } = Typography;
+const PAGE = 8;
 
-export default function PaymentsTable({ payments, formatMoney, onDelete }) {
-  const columns = [
-    { title: 'From', dataIndex: 'payer', key: 'payer', render: (value) => <Text strong>{value}</Text> },
-    { title: '', key: 'arrow', render: () => <SwapOutlined className="muted-icon" /> },
-    { title: 'To', dataIndex: 'payee', key: 'payee', render: (value) => <Text strong>{value}</Text> },
-    { title: 'Amount', dataIndex: 'amount', key: 'amount', align: 'right', render: formatMoney },
-    {
-      title: '',
-      key: 'action',
-      align: 'right',
-      render: (_, record) => (
-        <Popconfirm title="Remove this payment?" onConfirm={() => onDelete(record.id)}>
-          <Button type="text" danger icon={<DeleteOutlined />} aria-label="Remove payment" />
-        </Popconfirm>
-      ),
-    },
-  ];
-
+export default function PaymentsTable({
+  payments, formatMoney, freshId, onDelete,
+}) {
+  const [shown, setShown] = useState(PAGE);
+  if (!payments.length) {
+    return (
+      <div className="gp-empty">
+        <p className="gp-empty-title">No payments recorded yet</p>
+        <p className="gp-empty-text">When someone pays someone back, record it and the balances update.</p>
+      </div>
+    );
+  }
   return (
-    <Table
-      size="middle"
-      rowKey="id"
-      columns={columns}
-      dataSource={payments}
-      pagination={{ pageSize: 5, hideOnSinglePage: true }}
-      locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No payments recorded yet." /> }}
-    />
+    <>
+      <ul className="gp-plain-list gp-ledger" aria-label="Payments">
+        {payments.slice(0, shown).map((payment) => (
+          <li key={payment.id} className={'gp-entry is-payment' + (payment.id === freshId ? ' is-fresh' : '')}>
+            <StitchRow
+              payer={payment.payer}
+              payee={payment.payee}
+              amount={payment.amount}
+              formatMoney={formatMoney}
+              settled
+              action={(
+                <button
+                  type="button"
+                  className="gp-icon-button is-danger-outline"
+                  onClick={() => onDelete(payment)}
+                  aria-label={'Remove payment: ' + payment.payer + ' to ' + payment.payee}
+                >
+                  <Icon name="trash" size={18} />
+                </button>
+              )}
+            />
+          </li>
+        ))}
+      </ul>
+      {payments.length > shown && (
+        <button type="button" className="gp-button is-quiet" onClick={() => setShown(shown + PAGE)}>
+          Show {Math.min(PAGE, payments.length - shown)} more
+        </button>
+      )}
+    </>
   );
 }

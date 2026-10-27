@@ -17,28 +17,74 @@ test('a guest can split a bill, settle up and keep the data after a reload', asy
   await page.goto('/');
   await expect(page).toHaveURL(/\/groups\/[\w-]+$/);
   await expect(page.getByRole('heading', { level: 1, name: 'My first group' })).toBeVisible();
+  await expect(page.getByText(/Saved on this device/)).toBeVisible();
 
   await page.getByLabel('Add participant name').fill('Asha, Ben, Chitra');
   await page.getByLabel('Add participant name').press('Enter');
-  await expect(page.locator('.people-list')).toContainText('Chitra');
+  await expect(page.getByRole('button', { name: /manage people, 3 people/i })).toBeVisible();
 
-  await page.getByLabel(/what was it for/i).fill('Dinner');
-  await page.getByLabel(/who paid/i).click();
-  await page.getByTitle('Asha', { exact: true }).last().click();
-  await page.getByLabel(/total amount/i).fill('900');
-  await page.getByRole('button', { name: /add expense/i }).click();
-  await expect(page.getByRole('cell', { name: /Dinner/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Add expense' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Add an expense' });
+  await sheet.getByLabel('Total amount').fill('900');
+  await sheet.getByLabel('What was it for?').fill('Dinner');
+  await sheet.getByRole('radio', { name: /Asha/ }).click();
+  await expect(sheet.getByText('₹300.00 each')).toBeVisible();
+  await sheet.getByRole('button', { name: /add expense/i }).click();
+  await expect(sheet).toBeHidden();
 
-  await page.getByRole('tab', { name: /balances/i }).click();
-  const settle = page.locator('.settlement-box');
+  const expenses = page.getByRole('list', { name: 'Expenses' });
+  await expect(expenses.getByText('Dinner')).toBeVisible();
+  const balances = page.getByRole('list', { name: 'Balances' });
+  await expect(balances).toContainText('is owed');
+  await expect(balances).toContainText('+₹600.00');
+  await expect(balances).toContainText('−₹300.00');
+
+  await page.getByRole('button', { name: /^settle up/i }).click();
+  const settle = page.getByRole('dialog', { name: 'Settle up' });
   await expect(settle).toContainText('Ben');
   await expect(settle).toContainText('Chitra');
   await expect(settle.getByText('₹300.00')).toHaveCount(2);
+  await settle.getByRole('button', { name: /Mark paid: Ben pays Asha/ }).click();
+  const payment = page.getByRole('dialog', { name: 'Record a payment' });
+  await expect(payment.getByLabel('From')).toHaveValue('Ben');
+  await payment.getByRole('button', { name: 'Record payment' }).click();
+  await expect(page.getByRole('dialog', { name: 'Settle up' }).getByText(/Chitra/).first()).toBeVisible();
+  await page.getByRole('dialog', { name: 'Settle up' }).getByRole('button', { name: 'Close' }).click();
+
+  await page.getByRole('tab', { name: /payments/i }).click();
+  await expect(page.getByRole('list', { name: 'Payments' })).toContainText('Ben');
 
   const url = page.url();
   await page.reload();
   await expect(page).toHaveURL(url);
-  await expect(page.getByRole('cell', { name: /Dinner/ })).toBeVisible();
+  await expect(page.getByRole('list', { name: 'Expenses' }).getByText('Dinner')).toBeVisible();
+});
+
+test('the add-expense sheet explains what is missing and keeps what was typed', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Add participant name').fill('Asha, Ben');
+  await page.getByLabel('Add participant name').press('Enter');
+  await page.getByRole('button', { name: 'Add expense' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Add an expense' });
+  await sheet.getByLabel('What was it for?').fill('Taxi');
+  await sheet.getByRole('button', { name: /add expense/i }).click();
+  await expect(sheet.getByText('Choose who paid')).toBeVisible();
+  await expect(sheet.getByText('Enter the total')).toBeVisible();
+  await expect(sheet.getByLabel('What was it for?')).toHaveValue('Taxi');
+  await page.keyboard.press('Escape');
+  await expect(sheet).toBeHidden();
+});
+
+test('the group page follows the device appearance', async ({ browser }) => {
+  for (const scheme of ['dark', 'light']) {
+    const context = await browser.newContext({ colorScheme: scheme });
+    const page = await context.newPage();
+    await page.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.fulfill({ status: 200, body: '' }));
+    await page.goto('/');
+    await expect(page.getByRole('heading', { level: 1, name: 'My first group' })).toBeVisible();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', scheme);
+    await context.close();
+  }
 });
 
 test('groups have their own currency and every page has a working URL', async ({ page }) => {
@@ -51,7 +97,7 @@ test('groups have their own currency and every page has a working URL', async ({
   await page.getByTitle('US Dollar (USD)').click();
   await dialog.getByRole('button', { name: 'Create group' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'New York trip' })).toBeVisible();
-  await expect(page.locator('.page-intro-extra')).toContainText('USD');
+  await expect(page.getByText('USD', { exact: true })).toBeVisible();
 
   for (const [path, heading] of [['/history', 'Activity history'], ['/people', 'Saved people'], ['/settings', 'Settings'], ['/profile', 'Your account']]) {
     await page.goto(path);

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router';
+import { Link, useLocation, useMatch } from 'react-router';
 import { Avatar, Badge, Button, Layout, Space, Tooltip } from 'antd';
 import {
   AppstoreOutlined, BarChartOutlined, HistoryOutlined, MoonOutlined, SettingOutlined,
@@ -14,6 +14,7 @@ const { Header } = Layout;
 export default function TopBar() {
   const { workspace, auth, dark, toggleDark } = useApp();
   const { pathname } = useLocation();
+  const onGroup = Boolean(useMatch('/groups/:groupId'));
   const { groups, savedPeople, profile } = workspace;
   const lastGroup = groups.find((group) => group.id === readLastGroup()) || groups[0];
 
@@ -34,7 +35,7 @@ export default function TopBar() {
     : undefined;
 
   return (
-    <Header className="topbar">
+    <Header className={'topbar' + (onGroup ? ' topbar-group' : '')}>
       <div className="topbar-inner">
         <Link to="/" className="brand" aria-label="Expense Splitter home">
           <span className="brand-mark"><WalletOutlined /></span>
