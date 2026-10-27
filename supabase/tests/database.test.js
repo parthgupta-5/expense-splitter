@@ -41,7 +41,8 @@ describe('migrations', () => {
       "select table_name from information_schema.tables where table_schema = 'public' order by 1",
     )).rows.map((row) => row.table_name);
     expect(tables).toEqual([
-      'activity_log', 'expenses', 'group_members', 'group_people', 'groups', 'payments', 'profiles', 'rate_limits',
+      'activity_log', 'expenses', 'group_invitations', 'group_members', 'group_people', 'groups', 'payments', 'profiles',
+      'rate_limits',
       'released_usernames', 'reserved_usernames', 'saved_splits',
     ]);
   });
@@ -265,26 +266,39 @@ describe('sharing', () => {
     await as(db, owner, (tx) => insertExpense(tx, groupId));
   });
 
-  it('explains when the email has no account', async () => {
-    expect(await errorAs(db, owner, (tx) => tx.query('select invite_member($1, $2)', [groupId, 'nobody@example.com'])))
-      .toMatch(/No account uses that email/);
+  it('no longer adds anyone by email', async () => {
+    expect(await errorAs(db, owner, (tx) => tx.query('select invite_member($1, $2)', [groupId, friend.email])))
+      .toMatch(/replaced.*@username/);
   });
 
-  it('lets the owner invite by email (case-insensitive) and the friend then sees the group', async () => {
-    await as(db, owner, (tx) => tx.query('select invite_member($1, $2)', [groupId, friend.email.toUpperCase()]));
+  it('lets the owner invite by username; once the friend accepts they see the group (and no emails)', async () => {
+    await as(db, friend, (tx) => tx.query("select set_username('friend_one')"));
+    const person = (await as(db, owner, (tx) => tx.query(
+      "select id from group_people where group_id = $1 and name = 'Ben'", [groupId],
+    ))).rows[0].id;
+    const invitation = (await as(db, owner, (tx) => tx.query(
+      "select invite_by_username($1, $2, '@Friend_One') as value", [groupId, person],
+    ))).rows[0].value;
+    expect(invitation).toMatchObject({ status: 'pending', person_name: 'Ben', username: 'friend_one' });
+    await as(db, friend, (tx) => tx.query('select accept_invitation($1)', [invitation.id]));
     await as(db, friend, async (tx) => {
       expect(await count(tx, 'select count(*) from groups')).toBe(1);
       expect(await count(tx, 'select count(*) from expenses')).toBe(1);
-      const members = (await tx.query('select role, display_name from list_members($1)', [groupId])).rows;
-      expect(members).toEqual([{ role: 'owner', display_name: 'Owner' }, { role: 'member', display_name: 'Friend' }]);
+      const members = (await tx.query('select * from list_group_members($1)', [groupId])).rows;
+      expect((await tx.query('select email from list_members($1)', [groupId])).rows).toEqual([{ email: null }, { email: null }]);
+      expect(members.map(({ role, display_name: name, person_name: personName }) => ({ role, name, personName })))
+        .toEqual([{ role: 'owner', name: 'Owner', personName: null }, { role: 'member', name: 'Friend', personName: 'Ben' }]);
+      expect(Object.keys(members[0])).not.toContain('email');
+      expect(JSON.stringify(members)).not.toMatch(/@example\.com/);
     });
-    expect(await errorAs(db, owner, (tx) => tx.query('select invite_member($1, $2)', [groupId, friend.email])))
-      .toMatch(/already a member/);
   });
 
   it('lets a member add expenses but not invite, remove others or delete the group', async () => {
     expect(await errorAs(db, friend, (tx) => insertExpense(tx, groupId))).toBeNull();
-    expect(await errorAs(db, friend, (tx) => tx.query('select invite_member($1, $2)', [groupId, stranger.email])))
+    const person = (await as(db, friend, (tx) => tx.query(
+      "select id from group_people where group_id = $1 and name = 'Chitra'", [groupId],
+    ))).rows[0].id;
+    expect(await errorAs(db, friend, (tx) => tx.query("select invite_by_username($1, $2, 'stranger')", [groupId, person])))
       .toBe('Only the group owner can invite people');
     expect(await errorAs(db, friend, (tx) => tx.query('select remove_member($1, $2)', [groupId, owner.id])))
       .toMatch(/owner cannot leave/);
