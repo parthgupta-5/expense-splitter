@@ -48,6 +48,10 @@ vi.mock('./data/cloudRepo', () => ({
   subscribeToChanges: vi.fn(),
   fetchActivity: vi.fn(),
   importGroup: vi.fn(),
+  // Read by the app shell for every signed-in account (invitations in the bell, people statuses, deletion checks).
+  listMyInvitations: vi.fn(() => Promise.resolve([])),
+  listGroupPeople: vi.fn(() => Promise.resolve([])),
+  accountDeletionBlockers: vi.fn(() => Promise.resolve([])),
   checkUsername: vi.fn(),
   suggestUsername: vi.fn(),
   setUsername: vi.fn(),

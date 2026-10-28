@@ -173,6 +173,13 @@ export default function AuthModal() {
         {mode === 'forgot' && (
           <Paragraph type="secondary">We will email you a 6-digit code to choose a new password.</Paragraph>
         )}
+        {mode === 'signup' && (
+          <Paragraph type="secondary" className="auth-legal">
+            By creating an account you agree to the{' '}
+            <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a> and confirm you have read the{' '}
+            <a href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.
+          </Paragraph>
+        )}
         <Button type="primary" block htmlType="submit" loading={busy} disabled={googleBusy}>
           {{ signup: 'Create account', signin: 'Sign in', forgot: 'Send code' }[mode]}
         </Button>

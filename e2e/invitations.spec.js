@@ -21,12 +21,20 @@ test('guests cannot send or receive invitations, and still manage their own grou
   await expect(page.getByText(/Invitations for you/)).toHaveCount(0);
 
   await page.goto('/groups/my-first-group');
-  await page.getByRole('button', { name: /share/i }).click();
+  await page.getByRole('button', { name: /members/i }).click();
   const share = page.getByRole('dialog');
   await expect(share.getByText(/Sign in to share this group/)).toBeVisible();
   await expect(share.getByLabel(/their username/i)).toHaveCount(0);
   await expect(share.getByPlaceholder(/example\.com/)).toHaveCount(0);
   await share.getByRole('button', { name: /close/i }).click();
+
+  // "Add people" still offers both choices; adding by username explains that it needs an account.
+  await page.getByRole('button', { name: /add people/i }).click();
+  const add = page.getByRole('dialog', { name: 'Add people' });
+  await add.getByText('Add by username').click();
+  await expect(add.getByText(/sends them an invitation, so it needs an account/)).toBeVisible();
+  await expect(add.getByLabel(/their username/i)).toHaveCount(0);
+  await add.getByRole('button', { name: /close/i }).click();
 
   await page.getByRole('button', { name: /group settings/i }).click();
   const settings = page.getByRole('dialog');

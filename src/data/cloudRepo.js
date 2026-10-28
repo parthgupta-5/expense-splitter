@@ -31,9 +31,10 @@ export async function fetchGroup(groupId, userId) {
   return row ? rowToGroup(row, userId) : null;
 }
 
-export async function createGroup(group, userId) {
-  check(await supabase.from('groups').insert({
-    id: group.id, name: group.name.trim(), currency_code: group.currencyCode, created_by: userId,
+/** Creates the group with the signed-in user as its owner and first person. Resolves to { id, person_id, person_name }. */
+export async function createGroup(group) {
+  return check(await supabase.rpc('create_group', {
+    new_group_id: group.id, new_name: group.name.trim(), new_currency: group.currencyCode,
   }));
 }
 
@@ -91,22 +92,18 @@ export async function listMembers(groupId) {
 }
 
 // Invitations: every rule (owner only, the invitee only, expiry, cooldown, limits) is enforced by the database
-// functions in 2026103101_username_invitations.sql. A rule that is not met comes back as { error }.
+// functions in 2026103101_username_invitations.sql and 2026110101_people_invites_account_deletion.sql. A rule that is
+// not met comes back as { error }.
 const orError = (result) => {
   if (result?.error) throw new Error(result.error);
   return result;
 };
 
-/** Owner: invites the account with this @username to become `personId` in the group. */
+/** Owner: invites the account with this @username to become `personId` in the group (linking a guest, or resending). */
 export async function inviteByUsername(groupId, personId, username) {
   return orError(check(await supabase.rpc('invite_by_username', {
     target_group_id: groupId, target_person_id: personId, invitee_username: username,
   })));
-}
-
-/** Owner: the group's invitations, pending first. */
-export async function listGroupInvitations(groupId) {
-  return check(await supabase.rpc('list_group_invitations', { target_group_id: groupId })) || [];
 }
 
 export async function revokeInvitation(invitationId) {
@@ -125,6 +122,64 @@ export async function acceptInvitation(invitationId) {
 
 export async function declineInvitation(invitationId) {
   return orError(check(await supabase.rpc('decline_invitation', { invitation_id: invitationId })));
+}
+
+// People and username invitations as one flow (2026110101_people_invites_account_deletion.sql).
+
+/** Every person in the group with their status (member, invitation pending, guest); details only for the owner. */
+export async function listGroupPeople(groupId) {
+  return check(await supabase.rpc('list_group_people', { target_group_id: groupId })) || [];
+}
+
+/** Owner: who this exact @username is (public details only) and where they stand with the group. Rate limited. */
+export async function findInvitee(groupId, username) {
+  return check(await supabase.rpc('find_invitee', { target_group_id: groupId, invitee_username: username }));
+}
+
+/** Owner: adds the account as a new person and sends its invitation, in one step. */
+export async function addPersonByUsername(groupId, username) {
+  return orError(check(await supabase.rpc('add_person_by_username', {
+    target_group_id: groupId, invitee_username: username,
+  })));
+}
+
+/** Owner: adds themselves to their group as a new person, or links themselves to `personId`. */
+export async function addMeToGroup(groupId, personId = null) {
+  return orError(check(await supabase.rpc('add_me_to_group', { target_group_id: groupId, target_person_id: personId })));
+}
+
+/** Owner: stops inviting this person (revokes a pending invitation, hides answered ones); they stay as a guest. */
+export async function keepPersonAsGuest(personId) {
+  return orError(check(await supabase.rpc('keep_person_as_guest', { target_person_id: personId })));
+}
+
+/** The caller's own groups that other members use; while there are any, the account cannot be deleted. */
+export async function accountDeletionBlockers() {
+  return check(await supabase.rpc('account_deletion_blockers')) || [];
+}
+
+/** An error from the delete-account Edge Function, with its reason code (and the blocking groups, if any). */
+export class AccountDeletionError extends Error {
+  constructor({ code = 'unknown', message, groups = [] }) {
+    super(message || 'Your account could not be deleted. Nothing was changed.');
+    this.code = code;
+    this.groups = groups;
+  }
+}
+
+/**
+ * Asks the delete-account Edge Function to delete the signed-in account (it checks the session, a recent sign-in and
+ * the typed username, then removes photos and the user). Resolves only once the account is deleted.
+ */
+export async function deleteAccount(confirm) {
+  const { data, error } = await supabase.functions.invoke('delete-account', { body: { confirm } });
+  if (!error && data?.deleted) return data;
+  let reason = {};
+  try { reason = (await error?.context?.json?.()) || {}; } catch { /* not a JSON reply */ }
+  if (!reason.code && /failed to send|fetch/i.test(String(error?.message))) {
+    reason = { code: 'network', message: "Can't reach the server. Check your connection. Nothing was deleted." };
+  }
+  throw new AccountDeletionError(reason);
 }
 
 export async function removeMember(groupId, userId) {
@@ -185,16 +240,26 @@ export async function setUsername(name) {
  * Group deletions arrive separately because the activity log is deleted with the group.
  * onGroupChanged also receives the activity row (for the activity bell); onStatus receives 'live' while the channel is
  * connected and 'offline' when it fails, times out or closes (the client keeps retrying and reports 'live' again).
+ * onInvitationsChanged fires when an invitation to this user, or in a group they own, changes. It listens on the same
+ * channel to the user's own invitation_updates row, which holds only a timestamp (Row Level Security: own row only).
  */
-export function subscribeToChanges({ onGroupChanged, onGroupDeleted, onStatus = () => {} }) {
-  const channel = supabase
+export function subscribeToChanges({
+  userId, onGroupChanged, onGroupDeleted, onInvitationsChanged, onStatus = () => {},
+}) {
+  let channel = supabase
     .channel('expense-splitter-changes')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'activity_log' }, (payload) => {
       if (payload.new?.group_id) onGroupChanged(payload.new.group_id, payload.new);
     })
     .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'groups' }, (payload) => {
       if (payload.old?.id) onGroupDeleted(payload.old.id);
-    })
-    .subscribe((status) => onStatus(status === 'SUBSCRIBED' ? 'live' : 'offline'));
+    });
+  if (userId && onInvitationsChanged) {
+    const ownRow = { schema: 'public', table: 'invitation_updates', filter: `user_id=eq.${userId}` };
+    channel = channel
+      .on('postgres_changes', { event: 'INSERT', ...ownRow }, () => onInvitationsChanged())
+      .on('postgres_changes', { event: 'UPDATE', ...ownRow }, () => onInvitationsChanged());
+  }
+  channel.subscribe((status) => onStatus(status === 'SUBSCRIBED' ? 'live' : 'offline'));
   return () => { supabase.removeChannel(channel); };
 }

@@ -149,6 +149,33 @@ export const writeActivitySeen = (userId, activityId) => {
   write(ACTIVITY_SEEN_KEY, JSON.stringify(all));
 };
 
+// The pending invitations each account has already seen in the bell, on this device only (ids, nothing else). Seeing an
+// invitation only clears the bell's count: it stays pending until it is accepted or declined.
+const INVITATIONS_SEEN_KEY = 'expenseSplitterInvitationsSeenV1';
+/** Storage keys whose changes in another tab should update the bell here. */
+export const SEEN_KEYS = { activity: ACTIVITY_SEEN_KEY, invitations: INVITATIONS_SEEN_KEY };
+const invitationsSeen = () => parseObject(read(INVITATIONS_SEEN_KEY));
+export const readInvitationsSeen = (userId) => {
+  const ids = invitationsSeen()[userId];
+  return Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : [];
+};
+export const writeInvitationsSeen = (userId, ids) => {
+  const all = invitationsSeen();
+  all[userId] = ids;
+  write(INVITATIONS_SEEN_KEY, JSON.stringify(all));
+};
+
+/** After an account is deleted: removes what this device remembered about it (bell markers, last opened group). */
+export function forgetAccountOnDevice(userId) {
+  [ACTIVITY_SEEN_KEY, INVITATIONS_SEEN_KEY].forEach((key) => {
+    const all = parseObject(read(key));
+    if (!(userId in all)) return;
+    delete all[userId];
+    write(key, JSON.stringify(all));
+  });
+  remove(LAST_GROUP_KEY);
+}
+
 export const isNonEmptyGroup = (group) => (
   (group.people?.length || 0) + (group.expenses?.length || 0) + (group.payments?.length || 0) > 0
 );

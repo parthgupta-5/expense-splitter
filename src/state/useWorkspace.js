@@ -6,6 +6,7 @@ import { supabaseUrl } from '../supabase';
 import { ownAvatarPath } from '../lib/avatarUrl';
 import { DEFAULT_CURRENCY } from '../lib/currency';
 import { friendlyError } from '../lib/errors';
+import { personLabel } from '../lib/people';
 import {
   clearGuestState, isNonEmptyGroup, newGroup, readGuestState, writeGuestState,
 } from '../lib/storage';
@@ -116,12 +117,14 @@ export function useWorkspace({ user, authReady, notify }) {
   }, []);
 
   // Live updates from other members, plus a full refresh when the tab becomes visible again. The same channel feeds
-  // the activity bell (through onActivity), so there is only ever one subscription.
+  // the activity bell (through onActivity) and invitations (through onInvitationsChange), so there is only ever one
+  // subscription.
   // The channel's state for this account: 'off' (guest) | 'connecting' | 'live' | 'offline'.
   const [channel, setChannel] = useState({ userId: null, status: 'connecting' });
   let realtime = 'off';
   if (mode === 'cloud' && profileUserId) realtime = channel.userId === profileUserId ? channel.status : 'connecting';
   const activityListeners = useRef(new Set());
+  const invitationListeners = useRef(new Set());
   useEffect(() => {
     if (mode !== 'cloud' || !profileUserId) return undefined;
     let active = true;
@@ -130,15 +133,23 @@ export function useWorkspace({ user, authReady, notify }) {
       clearTimeout(timers.get(groupId));
       timers.set(groupId, setTimeout(() => { timers.delete(groupId); refreshGroup(groupId); }, REFRESH_DELAY_MS));
     };
+    const invitationsChanged = () => invitationListeners.current.forEach((listener) => listener());
     const unsubscribe = repo.subscribeToChanges({
+      userId: profileUserId,
       onGroupChanged: (groupId, row) => {
         schedule(groupId);
         if (row) activityListeners.current.forEach((listener) => listener(row));
       },
-      onGroupDeleted: (groupId) => dispatch({ type: 'removeGroup', groupId }),
+      // A deleted group also takes its pending invitations with it.
+      onGroupDeleted: (groupId) => { dispatch({ type: 'removeGroup', groupId }); invitationsChanged(); },
+      onInvitationsChanged: invitationsChanged,
       onStatus: (status) => { if (active) setChannel({ userId: profileUserId, status }); },
     });
-    const onVisible = () => { if (document.visibilityState === 'visible') reloadAll(); };
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      reloadAll();
+      invitationsChanged();
+    };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       active = false;
@@ -153,6 +164,15 @@ export function useWorkspace({ user, authReady, notify }) {
   const onActivity = useCallback((listener) => {
     activityListeners.current.add(listener);
     return () => { activityListeners.current.delete(listener); };
+  }, []);
+
+  /**
+   * Calls `listener()` whenever invitations may have changed: one sent to this user or in a group they own changed,
+   * a group was deleted, or the tab became visible again. Returns the function that stops it.
+   */
+  const onInvitationsChange = useCallback((listener) => {
+    invitationListeners.current.add(listener);
+    return () => { invitationListeners.current.delete(listener); };
   }, []);
 
   const actions = useMemo(() => {
@@ -194,17 +214,32 @@ export function useWorkspace({ user, authReady, notify }) {
     };
 
     return {
+      /**
+       * Signed in, the creator is the group's first person (linked to their account), so they can pay and share at
+       * once; the server names them the same way (person_label()) and the group is re-read for the stored details.
+       * Guest groups start empty, as before.
+       */
       createGroup: async (name, currencyCode) => {
-        const uid = stateRef.current.userId;
+        const { userId: uid, profile } = stateRef.current;
+        const cloud = isCloud();
+        const me = cloud ? personLabel(profile) : null;
         const group = {
           ...newGroup(name.trim(), currencyCode),
-          ...(isCloud() ? { ownerId: uid, role: 'owner', memberCount: 1, cloud: true } : {}),
+          ...(cloud ? {
+            people: [me],
+            personRecords: [{ id: null, name: me, userId: uid }],
+            ownerId: uid,
+            role: 'owner',
+            memberCount: 1,
+            cloud: true,
+          } : {}),
         };
         const ok = await perform({
           local: { type: 'upsertGroup', group },
-          remote: () => repo.createGroup(group, uid),
+          remote: () => repo.createGroup(group),
           failure: 'Could not create the group',
         });
+        if (ok && cloud) refreshGroup(group.id);
         return ok ? group : null;
       },
       updateGroup: (groupId, { name, currencyCode }) => perform({
@@ -331,8 +366,9 @@ export function useWorkspace({ user, authReady, notify }) {
       refreshGroup,
       reload: reloadAll,
       onActivity,
+      onInvitationsChange,
     };
-  }, [refreshGroup, reloadAll, onActivity]);
+  }, [refreshGroup, reloadAll, onActivity, onInvitationsChange]);
 
   return { ...state, realtime, actions };
 }

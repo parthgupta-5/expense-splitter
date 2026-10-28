@@ -270,3 +270,81 @@ body{background:var(--page)}
 .activity-entry-text .activity-new-dot{transform:translateY(-1px)}
 .activity-entry-meta{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
 .activity-panel-body:focus{outline:none}
+
+/* People, invitations, onboarding, policies and account deletion. Monochrome tokens only: green stays for success,
+   red for destructive actions and errors. */
+.people-card .section-heading{align-items:center}
+.people-card .section-heading h4.ant-typography{margin:0}
+.people-rows{margin:0;padding:0;list-style:none;border-top:1px solid var(--line)}
+.person-row{display:flex;align-items:center;gap:12px;padding:10px 2px;border-bottom:1px solid var(--line);min-width:0}
+.person-main{display:flex;flex-direction:column;gap:2px;flex:1 1 auto;min-width:0}
+.person-name{display:flex;flex-wrap:wrap;align-items:center;gap:6px;overflow-wrap:anywhere}
+.person-name .ant-tag{margin:0}
+.person-detail{font-size:12px;overflow-wrap:anywhere}
+.person-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:6px;flex:none}
+.people-empty{margin:4px 0 0;color:var(--muted)}
+.include-me{margin-bottom:12px}
+.add-people-choice{margin-bottom:16px}
+.add-people-pane .ant-form{margin-top:4px}
+.find-person-form .ant-form-item,.add-guest-form .ant-form-item{margin-bottom:12px}
+.invitee-card{display:flex;align-items:flex-start;gap:12px;margin-top:16px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--soft)}
+.invitee-copy{display:flex;flex-direction:column;gap:4px;min-width:0;overflow-wrap:anywhere}
+.invitee-add{margin-top:12px}
+.include-me-choice{display:block;margin-bottom:12px}
+.include-me-select{width:100%;margin-bottom:12px}
+.include-me-actions{display:flex;justify-content:flex-end}
+.members-hint{margin-bottom:12px}
+
+.welcome-panel{margin-bottom:18px;border:1px solid var(--line);background:var(--surface)}
+.welcome-title.ant-typography{margin:0 0 6px;font:700 20px/1.3 'Manrope',sans-serif;color:var(--ink)}
+.welcome-steps{margin:0 0 12px;padding-left:20px;display:grid;gap:6px}
+.welcome-note{margin-bottom:12px}
+.welcome-actions{display:flex;flex-wrap:wrap;gap:8px}
+
+.notification-badge .ant-badge-count{background:var(--ink);color:var(--surface);box-shadow:0 0 0 1px var(--surface)}
+.bell-caught-up{margin:0 0 14px;font-weight:600}
+.bell-section+.bell-section{margin-top:20px}
+.bell-heading.ant-typography{margin:0 0 10px;font:700 15px/1.3 'Manrope',sans-serif;color:var(--ink)}
+.bell-empty{margin:0;color:var(--muted);font-size:13px}
+.bell-invitations{margin:0;padding:0;list-style:none;border-top:1px solid var(--line)}
+.bell-invitation{display:flex;flex-direction:column;gap:6px;padding:12px 6px;border-bottom:1px solid var(--line)}
+.bell-invitation-text{overflow-wrap:anywhere}
+.bell-invitation-meta{font-size:12px}
+.bell-invitation-actions{display:flex;flex-wrap:wrap;gap:8px}
+
+.app-footer{padding:8px 16px 28px;text-align:center}
+.app-footer-links{display:inline-flex;flex-wrap:wrap;justify-content:center;gap:8px;font-size:13px;color:var(--muted)}
+.app-footer-links a,.legal-links a,.legal-page a{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+.legal-page{max-width:760px;line-height:1.6}
+.legal-notice{margin-bottom:16px}
+.legal-updated{display:block;margin-bottom:12px;font-size:13px}
+.legal-intro.ant-typography{font-size:16px}
+.legal-toc ol{margin:0 0 8px;padding-left:20px;columns:2;column-gap:24px}
+.legal-section{scroll-margin-top:90px}
+.legal-section h2{margin:28px 0 8px;font:700 19px/1.3 'Manrope',sans-serif;color:var(--ink)}
+.legal-section h3{margin:16px 0 6px;font:700 15px/1.3 'Manrope',sans-serif;color:var(--ink)}
+.legal-section ul{padding-left:20px}
+.legal-section li+li{margin-top:6px}
+.legal-other{margin-top:28px}
+.auth-legal.ant-typography{font-size:12px;margin:0 0 12px}
+.auth-legal a{color:inherit;text-decoration:underline}
+
+.danger-card{border-color:color-mix(in srgb,var(--line),#d4380d 35%)}
+.settings-panel .danger-card .ant-card-body{display:block}
+.danger-card-body{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.danger-card-title.ant-typography{margin:0;font:700 16px/1.35 'Manrope',sans-serif;color:var(--ink)}
+.delete-account-list{margin:4px 0 12px;padding-left:20px}
+.delete-blockers,.delete-problem{margin:12px 0}
+.delete-blockers-list{margin:0;padding-left:20px}
+.delete-account-form{margin-top:12px}
+.delete-account-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
+.delete-reauth{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+
+@media(max-width:600px){
+  .person-row{flex-wrap:wrap}
+  .person-main{flex-basis:140px}
+  .person-actions{margin-left:auto}
+  .people-card .section-heading{flex-direction:row;flex-wrap:wrap;gap:10px}
+  .legal-toc ol{columns:1}
+  .danger-card-body .ant-btn{width:100%}
+}

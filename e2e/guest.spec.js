@@ -14,14 +14,24 @@ test.afterEach(async ({ page }) => {
   expect(page.errors, 'no errors in the browser console').toEqual([]);
 });
 
+// "Add people" → "Add guest" (the only choice that works without an account), then close the dialog.
+async function addGuests(page, names) {
+  await page.getByRole('button', { name: /add people/i }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add people' });
+  await dialog.getByLabel('Guest name').fill(names);
+  await dialog.getByLabel('Guest name').press('Enter');
+  await expect(dialog.getByLabel('Guest name')).toHaveValue('');
+  await dialog.getByRole('button', { name: 'Close' }).click();
+  await expect(dialog).toBeHidden();
+}
+
 test('a guest can split a bill, settle up and keep the data after a reload', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveURL(/\/groups\/my-first-group$/); // a readable address, not a long id
   await expect(page.getByRole('heading', { level: 1, name: 'My first group' })).toBeVisible();
 
-  await page.getByLabel('Add participant name').fill('Asha, Ben, Chitra');
-  await page.getByLabel('Add participant name').press('Enter');
-  await expect(page.locator('.people-list')).toContainText('Chitra');
+  await addGuests(page, 'Asha, Ben, Chitra');
+  await expect(page.locator('.people-rows')).toContainText('Chitra');
 
   await page.getByLabel(/what was it for/i).fill('Dinner');
   await page.getByLabel(/who paid/i).click();
@@ -64,8 +74,7 @@ test('groups have their own currency and every page has a working URL', async ({
 
 test('money fields take at most two decimals, use a decimal keypad and have no stepper', async ({ page }) => {
   await page.goto('/');
-  await page.getByLabel('Add participant name').fill('Asha, Ben');
-  await page.getByLabel('Add participant name').press('Enter');
+  await addGuests(page, 'Asha, Ben');
 
   const method = page.locator('.ant-form-item').filter({ has: page.locator('#split-method') });
   await expect(method).toContainText('Equal');

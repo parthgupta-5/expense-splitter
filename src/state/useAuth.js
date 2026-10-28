@@ -119,10 +119,20 @@ export function useAuth() {
     setUser(null);
   }, [setRecovering]);
 
+  /** After the account was deleted on the server: forgets the session in this browser only (it no longer exists). */
+  const forgetSession = useCallback(async () => {
+    if (supabase) {
+      try { await supabase.auth.signOut({ scope: 'local' }); } catch { /* already gone */ }
+    }
+    setRecovering(false);
+    setUser(null);
+  }, [setRecovering]);
+
   return {
     user,
     ready,
     recovering,
+    forgetSession,
     signUp,
     verifySignUpCode,
     resendSignUpCode,

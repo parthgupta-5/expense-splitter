@@ -105,6 +105,37 @@ describe('useWorkspace (signed in)', () => {
     unmount();
   });
 
+  it('creates a group with the signed-in user as its first person, shown at once, then re-reads it', async () => {
+    repo.fetchProfile.mockResolvedValue({ display_name: ' Asha  Rao ', username: 'asha_rao', saved_people: [], preferences: {} });
+    repo.createGroup.mockResolvedValue({ id: 'x', person_id: 'p-1', person_name: 'Asha Rao' });
+    const { result } = signedIn();
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    let created;
+    await act(async () => { created = await result.current.actions.createGroup('Goa', 'INR'); });
+    expect(created).toMatchObject({
+      people: ['Asha Rao'], personRecords: [{ id: null, name: 'Asha Rao', userId: 'u1' }], role: 'owner', cloud: true,
+    });
+    expect(repo.createGroup).toHaveBeenCalledWith(created);
+    await waitFor(() => expect(repo.fetchGroup).toHaveBeenCalledWith(created.id, 'u1'));
+  });
+
+  it('tells invitation listeners when an invitation changes, a group is deleted or the tab is shown again', async () => {
+    const { result } = signedIn();
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(repo.subscribeToChanges.mock.calls[0][0].userId).toBe('u1');
+    const heard = vi.fn();
+    let stop;
+    act(() => { stop = result.current.actions.onInvitationsChange(heard); });
+    act(() => realtime.onInvitationsChanged());
+    act(() => realtime.onGroupDeleted('g1'));
+    act(() => { document.dispatchEvent(new Event('visibilitychange')); });
+    expect(heard).toHaveBeenCalledTimes(3);
+    act(() => stop());
+    act(() => realtime.onInvitationsChanged());
+    expect(heard).toHaveBeenCalledTimes(3);
+    expect(repo.subscribeToChanges).toHaveBeenCalledTimes(1); // still the one channel
+  });
+
   it('never writes account data to this device', async () => {
     const { result } = signedIn();
     await waitFor(() => expect(result.current.status).toBe('ready'));

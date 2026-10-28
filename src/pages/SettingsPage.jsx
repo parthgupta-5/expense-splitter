@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router';
 import {
   Button, Card, Select, Space, Typography, Upload,
 } from 'antd';
@@ -7,6 +8,7 @@ import {
 } from '@ant-design/icons';
 import { useApp } from '../state/AppContext';
 import AccountSettings from '../components/AccountSettings';
+import DeleteAccount from '../components/DeleteAccount';
 import PageIntro from '../components/PageIntro';
 import { parseBackupText, portableGroup } from '../lib/backup';
 import { CURRENCIES, DEFAULT_CURRENCY } from '../lib/currency';
@@ -102,6 +104,13 @@ export default function SettingsPage() {
             <Button onClick={() => openAuth('signup')}>Sign in or create account</Button>
           </Setting>
         )}
+        <Setting title="Privacy and terms" description="What the app does with your data, how deletion works, and the rules for using it.">
+          <Space wrap className="legal-links">
+            <Link to="/privacy">Privacy Policy</Link>
+            <Link to="/terms">Terms of Service</Link>
+          </Space>
+        </Setting>
+        {cloud && <DeleteAccount />}
       </section>
     </>
   );

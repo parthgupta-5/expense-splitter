@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   LEGACY_STATE_KEYS, LEGACY_SYNC_META_KEY, MIRROR_MARK, STATE_KEY, clearGuestState, dropLegacyCloudCopies, isNonEmptyGroup,
   legacyGroup, newGroup, readActivitySeen, readGuestState, readSaved, writeActivitySeen, writeGuestState,
+  SEEN_KEYS, forgetAccountOnDevice, readInvitationsSeen, writeInvitationsSeen, writeLastGroup, readLastGroup,
 } from './storage';
 
 // Node 25+ ships an incomplete global localStorage, so tests use a small in-memory stand-in.
@@ -119,5 +120,29 @@ describe('activity seen marker (signed in, this device only)', () => {
     expect(readActivitySeen('u2')).toBeNull();
     localStorage.setItem('expenseSplitterActivitySeenV1', '{broken');
     expect(readActivitySeen('u1')).toBeNull();
+  });
+});
+
+describe('invitations seen in the bell (this device only)', () => {
+  it('keeps invitation ids per account and ignores damaged values', () => {
+    expect(readInvitationsSeen('u1')).toEqual([]);
+    writeInvitationsSeen('u1', ['i-1', 'i-2']);
+    writeInvitationsSeen('u2', ['i-9']);
+    expect(readInvitationsSeen('u1')).toEqual(['i-1', 'i-2']);
+    localStorage.setItem(SEEN_KEYS.invitations, JSON.stringify({ u1: 'nope', u2: ['ok', 3] }));
+    expect(readInvitationsSeen('u1')).toEqual([]);
+    expect(readInvitationsSeen('u2')).toEqual(['ok']);
+  });
+
+  it('forgets a deleted account\'s markers and last group, and nobody else\'s', () => {
+    writeActivitySeen('gone', 5);
+    writeActivitySeen('stays', 7);
+    writeInvitationsSeen('gone', ['i-1']);
+    writeLastGroup('g-1');
+    forgetAccountOnDevice('gone');
+    expect(readActivitySeen('gone')).toBeNull();
+    expect(readActivitySeen('stays')).toBe(7);
+    expect(readInvitationsSeen('gone')).toEqual([]);
+    expect(readLastGroup()).toBeNull();
   });
 });

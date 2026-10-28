@@ -30,6 +30,7 @@ vi.mock('./data/cloudRepo', () => ({
   fetchActivity: vi.fn(),
   importGroup: vi.fn(),
   listMyInvitations: vi.fn(),
+  listGroupPeople: vi.fn(),
 }));
 
 const ME = 'user-me';
@@ -101,6 +102,7 @@ beforeEach(() => {
   repo.fetchGroup.mockImplementation((id) => Promise.resolve([GOA, FLAT].find((item) => item.id === id) || null));
   repo.fetchActivity.mockResolvedValue([]);
   repo.listMyInvitations.mockResolvedValue([]);
+  repo.listGroupPeople.mockResolvedValue([]);
 });
 afterEach(() => { cleanup(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 
@@ -112,7 +114,7 @@ const renderAt = (path = '/groups') => render(
     <AppProvider><App /><Location /></AppProvider>
   </MemoryRouter>,
 );
-const bell = () => screen.findByRole('button', { name: /^Activity/ });
+const bell = () => screen.findByRole('button', { name: /^Notifications/ });
 // Finds the bell once, then polls only its label. Re-running a page-wide role query inside waitFor keeps a slow
 // machine too busy to deliver the very data being waited for.
 const bellLabelBecomes = async (label) => {
@@ -144,7 +146,7 @@ describe('activity bell: who sees it', () => {
     };
     renderAt();
     await screen.findByRole('link', { name: 'Sign in' });
-    expect(screen.queryByRole('button', { name: /^Activity/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Notifications/ })).toBeNull();
     expect(repo.fetchActivity).not.toHaveBeenCalled();
     expect(repo.subscribeToChanges).not.toHaveBeenCalled();
   });
@@ -156,15 +158,15 @@ describe('activity bell: unread dot (this device only)', () => {
     repo.fetchActivity.mockResolvedValue([entry(2), entry(1)]);
     renderAt();
     await waitFor(() => expect(seenStored()).toBe(2)); // first use on this device: the history counts as seen
-    expect((await bell()).getAttribute('aria-label')).toBe('Activity');
+    expect((await bell()).getAttribute('aria-label')).toBe('Notifications');
 
     live(entry(3, { actor: ME, actorName: 'Me' })); // your own change is not "new" to you
-    expect((await bell()).getAttribute('aria-label')).toBe('Activity');
+    expect((await bell()).getAttribute('aria-label')).toBe('Notifications');
 
     live(entry(4));
-    await bellLabelBecomes('Activity (new activity)');
-    expect(document.querySelector('.activity-bell [role="status"]').textContent).toBe('New activity in your groups');
-    expect(document.querySelector('.activity-bell .ant-badge-dot')).toBeTruthy();
+    await bellLabelBecomes('Notifications (1 new update in your groups)');
+    expect(document.querySelector('.activity-bell [role="status"]').textContent).toBe('1 new update in your groups');
+    expect(document.querySelector('.activity-bell .ant-badge-count').textContent).toBe('1');
   });
 
   it('opening the panel clears the dot and remembers that on this device, without writing to the server', async () => {
@@ -173,12 +175,12 @@ describe('activity bell: unread dot (this device only)', () => {
     store.set(SEEN_KEY, JSON.stringify({ [ME]: 1, 'someone-else': 99 }));
     repo.fetchActivity.mockResolvedValue([entry(3), entry(2), entry(1)]);
     renderAt();
-    await bellLabelBecomes('Activity (new activity)');
+    await bellLabelBecomes('Notifications (2 new updates in your groups)');
 
     const opened = await openPanel(user);
     await waitFor(() => expect(seenStored()).toBe(3));
     expect(JSON.parse(store.get(SEEN_KEY))['someone-else']).toBe(99);
-    expect((await bell()).getAttribute('aria-label')).toBe('Activity');
+    expect((await bell()).getAttribute('aria-label')).toBe('Notifications');
     // The rows that were new when the panel opened are marked for sighted and screen-reader users.
     expect(within(opened).getAllByText('New:')).toHaveLength(2);
     expect(repo.saveProfile).not.toHaveBeenCalled();
@@ -186,7 +188,7 @@ describe('activity bell: unread dot (this device only)', () => {
     cleanup();
     renderAt(); // a reload on this device: still seen
     await waitFor(() => expect(repo.fetchActivity).toHaveBeenCalledTimes(3));
-    expect((await bell()).getAttribute('aria-label')).toBe('Activity');
+    expect((await bell()).getAttribute('aria-label')).toBe('Notifications');
   });
 
   it('keeps working when this browser blocks storage', async () => {
@@ -198,10 +200,10 @@ describe('activity bell: unread dot (this device only)', () => {
     });
     repo.fetchActivity.mockResolvedValue([entry(1)]);
     renderAt();
-    expect((await bell()).getAttribute('aria-label')).toBe('Activity');
+    expect((await bell()).getAttribute('aria-label')).toBe('Notifications');
     await waitFor(() => expect(realtime).toBeTruthy());
     live(entry(2));
-    await bellLabelBecomes('Activity (new activity)');
+    await bellLabelBecomes('Notifications (1 new update in your groups)');
   });
 });
 
@@ -274,7 +276,7 @@ describe('activity panel: live updates', () => {
     await waitFor(() => expect(shownTexts(opened)).toHaveLength(2));
     expect(shownTexts(opened)[0]).toMatch(/Dinner 2/);
     // Seen while open: no dot appears for it.
-    expect((await bell()).getAttribute('aria-label')).toBe('Activity');
+    expect((await bell()).getAttribute('aria-label')).toBe('Notifications');
 
     // The channel drops and comes back: the log is re-read, and rows already shown are not repeated.
     repo.fetchActivity.mockResolvedValue([entry(3), entry(2), entry(1)]);

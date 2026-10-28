@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { managedAvatarSrc, newAvatarPath, ownAvatarPath } from './avatarUrl';
+import {
+  managedAvatarSrc, memberAvatarSrc, newAvatarPath, ownAvatarPath,
+} from './avatarUrl';
 
 const PROJECT = 'https://abcdefghijklmnop.supabase.co';
 const ME = '11111111-2222-4333-8444-555555555555';
@@ -49,5 +51,19 @@ describe('ownAvatarPath', () => {
     expect(managedAvatarSrc(url(), ME, PROJECT)).toBe(url());
     expect(managedAvatarSrc('https://old.example/tracker.png', ME, PROJECT)).toBeNull();
     expect(managedAvatarSrc(url(OTHER), ME, PROJECT)).toBeNull();
+  });
+});
+
+describe('memberAvatarSrc (other accounts\' photos, already checked by the database)', () => {
+  const project = 'https://abc.supabase.co';
+  const user = '11111111-2222-4333-8444-555555555555';
+  const file = '66666666-7777-4888-9999-000000000000.jpg';
+  it('shows only a managed photo in this project, in its owner\'s folder', () => {
+    const url = `${project}/storage/v1/object/public/avatars/${user}/${file}`;
+    expect(memberAvatarSrc(url, project)).toBe(url);
+    expect(memberAvatarSrc(url, 'https://other.supabase.co')).toBeNull();
+    expect(memberAvatarSrc(`${project}/storage/v1/object/public/avatars/${user}/x/${file}`, project)).toBeNull();
+    expect(memberAvatarSrc('https://evil.example/track.gif', project)).toBeNull();
+    expect(memberAvatarSrc(null, project)).toBeNull();
   });
 });

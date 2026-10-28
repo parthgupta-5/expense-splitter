@@ -18,7 +18,7 @@ test.afterEach(async ({ page }) => {
 test('guests see no activity bell, and the top bar still fits the screen', async ({ page }) => {
   await page.goto('/groups');
   await expect(page.getByRole('heading', { level: 1, name: 'Your groups' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Activity/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Notifications/ })).toHaveCount(0);
   await expect(page.locator('.activity-bell')).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Sign in' })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
@@ -26,5 +26,5 @@ test('guests see no activity bell, and the top bar still fits the screen', async
 
   await page.goto('/history');
   await expect(page.getByRole('heading', { level: 1, name: 'Activity history' })).toBeVisible();
-  await expect(page.getByRole('button', { name: /^Activity/ })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Notifications/ })).toHaveCount(0);
 });

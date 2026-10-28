@@ -5,7 +5,9 @@ import { DeleteOutlined, EditOutlined } from '@ant-design/icons';
 const { Text } = Typography;
 const SPLIT_LABELS = { unequal: 'Custom', percentages: 'Percentages', shares: 'Shares' };
 
-export default function ExpensesTable({ expenses, formatMoney, onEdit, onDelete }) {
+export default function ExpensesTable({
+  expenses, formatMoney, onEdit, onDelete, onAdd,
+}) {
   const columns = [
     {
       title: 'Expense',
@@ -70,7 +72,14 @@ export default function ExpensesTable({ expenses, formatMoney, onEdit, onDelete 
       dataSource={expenses}
       pagination={{ pageSize: 6, hideOnSinglePage: true }}
       locale={{
-        emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No expenses yet. Add the first one above." />,
+        emptyText: (
+          <Empty
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            description="No expenses yet. Record the first one (dinner, a taxi, the rent) and the balances appear here."
+          >
+            {onAdd && <Button onClick={onAdd}>Add an expense</Button>}
+          </Empty>
+        ),
       }}
       scroll={{ x: 660 }}
     />
