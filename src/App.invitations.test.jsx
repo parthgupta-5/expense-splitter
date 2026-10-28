@@ -7,7 +7,7 @@ import {
   afterEach, beforeAll, beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import {
-  cleanup, render, screen, waitFor, within,
+  cleanup, isInaccessible, render, screen, waitFor, within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router';
@@ -111,15 +111,24 @@ const renderAt = (path) => render(
     <AppProvider><App /><Location /></AppProvider>
   </MemoryRouter>,
 );
-const dialogTitled = (title) => screen.queryAllByRole('dialog').find((dialog) => within(dialog).queryByText(title)) || null;
+// A *ByRole query reads the computed style of every element it searches, and jsdom recomputes styles (Ant Design's many
+// rules) after each DOM change, so a page-wide role query costs about a second, more on CI, and inside waitFor it
+// re-runs on every change of an opening dialog. These helpers wait on cheap text, then run role queries once and only
+// inside the small part of the page that matters.
+const dialogTitled = (title) => screen.queryAllByText(title)
+  .map((node) => node.closest('[role="dialog"]'))
+  .find((dialog) => dialog && !isInaccessible(dialog)) || null;
 const findDialog = async (title) => {
   await waitFor(() => expect(dialogTitled(title)).toBeTruthy());
   return dialogTitled(title);
 };
 const shownOptions = async () => {
-  await screen.findAllByRole('option');
+  await waitFor(() => expect(document.querySelector('.ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option')).toBeTruthy());
   return Array.from(document.querySelectorAll('.ant-select-item-option')).map((option) => option.getAttribute('title'));
 };
+// The group page's action buttons (Share, Group settings).
+const pageActions = async () => within((await screen.findByText('Share')).closest('.page-intro-extra'));
+const openShare = async (user) => user.click((await pageActions()).getByRole('button', { name: /share/i }));
 async function choose(dialog, label, option) {
   const user = userEvent.setup();
   await user.click(within(dialog).getByLabelText(label));
@@ -133,7 +142,7 @@ describe('owner: Share dialog', () => {
     signIn(OWNER, [group('owner')]);
     repo.inviteByUsername.mockResolvedValue({ id: 'i-1', status: 'pending', person_name: 'Chitra', username: 'other_one' });
     renderAt('/groups/goa-trip');
-    await user.click(await screen.findByRole('button', { name: /share/i }));
+    await openShare(user);
     const dialog = await findDialog('Invite by username');
     await within(dialog).findByText('@owner_one');
     expect(within(dialog).queryByPlaceholderText(/example\.com/)).toBeNull();
@@ -154,7 +163,7 @@ describe('owner: Share dialog', () => {
     signIn(OWNER, [group('owner')]);
     repo.inviteByUsername.mockRejectedValue(new Error('No account has that username'));
     renderAt('/groups/goa-trip');
-    await user.click(await screen.findByRole('button', { name: /share/i }));
+    await openShare(user);
     const dialog = await findDialog('Invite by username');
     await choose(dialog, /who they are in this group/i, 'Asha');
     await user.type(within(dialog).getByLabelText(/their username/i), 'nobody_here');
@@ -165,13 +174,17 @@ describe('owner: Share dialog', () => {
   it('lists the group\'s invitations and revokes a pending one after confirmation', async () => {
     const user = userEvent.setup();
     signIn(OWNER, [group('owner')]);
-    repo.listGroupInvitations.mockResolvedValue([
+    let invitations = [
       { id: 'i-1', person_id: 'p-chitra', person_name: 'Chitra', invitee_username: 'other_one', status: 'pending', expires_at: '2026-11-30T00:00:00Z' },
       { id: 'i-0', person_id: 'p-asha', person_name: 'Asha', invitee_username: 'old_pal', status: 'declined' },
-    ]);
-    repo.revokeInvitation.mockResolvedValue({ status: 'revoked' });
+    ];
+    repo.listGroupInvitations.mockImplementation(() => Promise.resolve(invitations));
+    repo.revokeInvitation.mockImplementation((id) => {
+      invitations = invitations.map((item) => (item.id === id ? { ...item, status: 'revoked' } : item));
+      return Promise.resolve({ status: 'revoked' });
+    });
     renderAt('/groups/goa-trip');
-    await user.click(await screen.findByRole('button', { name: /share/i }));
+    await openShare(user);
     const dialog = await findDialog('Invitations');
     expect(await within(dialog).findByText('Pending')).toBeTruthy();
     expect(within(dialog).getByText('Declined')).toBeTruthy();
@@ -180,10 +193,19 @@ describe('owner: Share dialog', () => {
     expect(await shownOptions()).toEqual(['Asha']);
     await user.keyboard('{Escape}');
 
-    await user.click(within(dialog).getByRole('button', { name: 'Revoke' }));
-    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Revoke' }).length).toBe(2)); // the confirmation
-    await user.click(screen.getAllByRole('button', { name: 'Revoke' }).at(-1));
+    expect(within(dialog).getAllByText('Revoke')).toHaveLength(1); // only the pending one
+    const pendingRow = within(dialog).getByText('Pending').closest('.ant-list-item');
+    await user.click(within(pendingRow).getByRole('button', { name: 'Revoke' }));
+    const confirmation = (await screen.findByText('Revoke the invitation for Chitra?')).closest('.ant-popover');
+    expect(within(confirmation).getByText('@other_one will no longer be able to accept it.')).toBeTruthy();
+    expect(repo.revokeInvitation).not.toHaveBeenCalled();
+    await user.click(within(confirmation).getByRole('button', { name: 'Revoke' }));
     await waitFor(() => expect(repo.revokeInvitation).toHaveBeenCalledWith('i-1'));
+    expect(await screen.findByText('Invitation for Chitra revoked')).toBeTruthy();
+    // The list is re-read: the invitation now shows as revoked and can no longer be revoked.
+    expect(await within(dialog).findByText('Revoked')).toBeTruthy();
+    expect(within(dialog).queryByText('Pending')).toBeNull();
+    expect(within(dialog).queryByText('Revoke')).toBeNull();
   });
 });
 
@@ -192,13 +214,13 @@ describe('member', () => {
     const user = userEvent.setup();
     signIn(FRIEND, [group('member')]);
     renderAt('/groups/goa-trip');
-    await user.click(await screen.findByRole('button', { name: /share/i }));
+    await openShare(user);
     const share = await findDialog('Only the owner can invite or remove members.');
     expect(within(share).queryByLabelText(/their username/i)).toBeNull();
     expect(within(share).queryByText('Invite by username')).toBeNull();
     await user.click(within(share).getByRole('button', { name: /close/i }));
 
-    await user.click(screen.getByRole('button', { name: /group settings/i }));
+    await user.click((await pageActions()).getByRole('button', { name: /group settings/i }));
     const settings = await findDialog('Only the group owner can rename the group or change its currency.');
     expect(within(settings).queryByLabelText(/group name/i)).toBeNull();
     expect(within(settings).queryByRole('button', { name: /save changes/i })).toBeNull();
