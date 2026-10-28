@@ -113,6 +113,12 @@ const renderAt = (path = '/groups') => render(
   </MemoryRouter>,
 );
 const bell = () => screen.findByRole('button', { name: /^Activity/ });
+// Finds the bell once, then polls only its label. Re-running a page-wide role query inside waitFor keeps a slow
+// machine too busy to deliver the very data being waited for.
+const bellLabelBecomes = async (label) => {
+  await bell();
+  await waitFor(() => expect(document.querySelector('.activity-bell button').getAttribute('aria-label')).toBe(label));
+};
 const panel = () => document.querySelector('.activity-drawer .ant-drawer-section') || null;
 const openPanel = async (user) => {
   await user.click(await bell());
@@ -156,7 +162,7 @@ describe('activity bell: unread dot (this device only)', () => {
     expect((await bell()).getAttribute('aria-label')).toBe('Activity');
 
     live(entry(4));
-    await waitFor(async () => expect((await bell()).getAttribute('aria-label')).toBe('Activity (new activity)'));
+    await bellLabelBecomes('Activity (new activity)');
     expect(document.querySelector('.activity-bell [role="status"]').textContent).toBe('New activity in your groups');
     expect(document.querySelector('.activity-bell .ant-badge-dot')).toBeTruthy();
   });
@@ -167,7 +173,7 @@ describe('activity bell: unread dot (this device only)', () => {
     store.set(SEEN_KEY, JSON.stringify({ [ME]: 1, 'someone-else': 99 }));
     repo.fetchActivity.mockResolvedValue([entry(3), entry(2), entry(1)]);
     renderAt();
-    await waitFor(async () => expect((await bell()).getAttribute('aria-label')).toBe('Activity (new activity)'));
+    await bellLabelBecomes('Activity (new activity)');
 
     const opened = await openPanel(user);
     await waitFor(() => expect(seenStored()).toBe(3));
@@ -195,7 +201,7 @@ describe('activity bell: unread dot (this device only)', () => {
     expect((await bell()).getAttribute('aria-label')).toBe('Activity');
     await waitFor(() => expect(realtime).toBeTruthy());
     live(entry(2));
-    await waitFor(async () => expect((await bell()).getAttribute('aria-label')).toBe('Activity (new activity)'));
+    await bellLabelBecomes('Activity (new activity)');
   });
 });
 

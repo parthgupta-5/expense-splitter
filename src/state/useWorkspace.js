@@ -90,13 +90,15 @@ export function useWorkspace({ user, authReady, notify }) {
     return () => clearTimeout(timer);
   }, [mode, status, profileUserId, savedPeople, preferences]);
 
+  // Resolves to the group as just loaded (null when it is gone), so callers can use it before the next render.
   const refreshGroup = useCallback(async (groupId) => {
     const { mode: currentMode, userId: uid } = stateRef.current;
-    if (currentMode !== 'cloud') return;
+    if (currentMode !== 'cloud') return undefined;
     try {
       const group = await repo.fetchGroup(groupId, uid);
-      if (stateRef.current.userId !== uid) return;
+      if (stateRef.current.userId !== uid) return undefined;
       dispatch(group ? { type: 'upsertGroup', group } : { type: 'removeGroup', groupId });
+      return group;
     } catch {
       // Offline or a transient error: the next change event or tab focus retries.
     }

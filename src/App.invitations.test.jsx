@@ -256,7 +256,8 @@ describe('invitee: Groups page', () => {
     repo.listMyInvitations.mockResolvedValue([pending]);
     repo.acceptInvitation.mockRejectedValue(new Error('This invitation has expired. Ask the owner to invite you again.'));
     renderAt('/groups');
-    await user.click(await screen.findByRole('button', { name: 'Accept' }));
+    const panel = (await screen.findByRole('heading', { level: 2, name: 'Invitations for you (1)' })).closest('.invitations-panel');
+    await user.click(within(panel).getByRole('button', { name: 'Accept' }));
     expect(await screen.findByText('This invitation has expired. Ask the owner to invite you again.')).toBeTruthy();
     expect(screen.getByTestId('location').textContent).toBe('/groups');
   });
