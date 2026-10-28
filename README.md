@@ -1,7 +1,7 @@
 # Expense Splitter
 
 Split shared costs with friends, flatmates or travel groups, share the group so everyone can add expenses, and
-settle up with the fewest possible payments.
+settle up with a suggested plan of at most N−1 payments for N people.
 
 > **Links**
 >
@@ -37,10 +37,15 @@ A web app that is useful **without an account**, with an optional account for sy
    Names are trimmed and de-duplicated (case-insensitive).
 2. **Expenses.** Pick who paid and who took part, then split **equally, by custom amounts, by shares or by
    percentages**. Splits use the largest-remainder method in whole cents, so the parts always add up exactly to the
-   total. Expenses can be edited and deleted.
-3. **Balances and settling up.** Live net balance per person and a suggested repayment plan. Recording a repayment
-   larger than what is owed asks for confirmation. Someone who still owes or is owed money cannot be removed.
-4. **People and sharing.** Whoever creates a group (signed in) is its first person, so they can pay and share at once.
+   total. Expenses can be edited and deleted. An old expense that still names someone who has since been removed cannot
+   be edited until they are added back (editing would silently move their share onto everyone else). Each row says who
+   paid; who *added* an expense is in the group's history.
+3. **Balances and settling up.** Live net balance per person in words ("Owes ₹150.00", "Is owed ₹300.00",
+   "Settled") and a suggested repayment plan of at most N−1 payments. The group's summary says what is left to settle
+   ("Ben owes you ₹1,050.00", "All settled"). Recording a repayment larger than what is owed asks for confirmation.
+   Someone who still owes or is owed money cannot be removed.
+4. **People and sharing.** **Participants** are the people in a group's expenses; **members** are the accounts that can
+   open the group. Whoever creates a group (signed in) is its first participant, so they can pay and share at once.
    **Add people** offers two choices: **Add by username** (owner only) finds an exact @username, shows only their
    display name, @username and photo, then adds them as a person *and* sends the invitation in one step; they can be
    included in expenses straight away and get access once they accept (accepting links that same person, no
@@ -48,7 +53,7 @@ A web app that is useful **without an account**, with an optional account for sy
    member, invitation pending, declined/expired/revoked, guest), and an answered invitation always has a next step
    (Resend, Keep as guest, Remove). Owners of older groups can add or link themselves, and an owner can take themselves
    out of the expenses when settled. Only the owner renames the group or changes its currency. Nobody sees anyone's
-   email address. Changes from other members appear within a second (Supabase Realtime).
+   email address. Changes from other members appear without a reload (Supabase Realtime).
 5. **Notifications and history.** The bell lists invitations waiting for your answer (Accept or Decline right there)
    and the latest activity across your groups, live. Its count is what is new since you last opened it on this device;
    opening it never answers or hides an invitation. Every group also has a server-written log of who did what
@@ -56,14 +61,15 @@ A web app that is useful **without an account**, with an optional account for sy
 6. **Accounts.** Email and password sign-up confirmed with a 6-digit email code, Google sign-in, password reset by
    emailed code, and a change-password option in Settings. Each account chooses a unique @username at first sign-in and
    can upload a profile photo (re-encoded in the browser, metadata removed). Groups made before signing in can be
-   moved into the account in one click.
+   moved into the account in one click. Settings has a section menu for **Account** (photo, masked email, username,
+   sign-in method, display name), **Preferences** (default currency, light or dark theme) and **Data** (backup).
 7. **Backup and export.** JSON backup and restore with validation, and CSV export that is safe to open in spreadsheets.
 8. **Proper URLs.** Every page and every group has its own address, so the back button, refresh and bookmarks work.
 9. **First-time guidance and empty states.** A short, dismissible welcome for new accounts (with "Create your first
    group") and for guests on a fresh device; every empty list says what to do next.
 10. **Privacy, terms and account deletion.** Public `/privacy` and `/terms` pages (plain language, project/MVP, not
-    legal advice), linked from every page footer, Settings and the sign-up form. Settings has a separate **Delete
-    account** area (see "Account deletion and data retention" below).
+    legal advice), linked from every page footer (Settings included) and the sign-up form. Settings ends with a separate
+    **Delete account** section (see "Account deletion and data retention" below).
 
 ## How using the app without signing up works
 
@@ -115,8 +121,9 @@ Browser (React SPA on Vercel)
  ├─ src/main.jsx                 BrowserRouter + AppProvider (context) + error boundary
  ├─ src/App.jsx                  layout and routes: /groups/:groupId, /groups, /history, /people, /settings, /profile,
  │                               /auth/callback (email links and Google), /reset-password, /privacy, /terms
+ ├─ src/lazyModules.js           the pages and dialogs that load on demand, listed once (tests preload them)
  ├─ src/pages/                   one component per route (lazy-loaded)
- ├─ src/components/              forms, tables, dialogs (members, group settings, auth, import)
+ ├─ src/components/              forms, lists, tabs, dialogs (expense, members, group settings, auth, import)
  ├─ src/state/
  │    AppContext.jsx             provides auth + workspace + notifications to every page (no prop drilling)
  │    useAuth.js                 Supabase session, email codes, Google sign-in, password reset and change
@@ -367,14 +374,14 @@ Deploy it by hand (nothing in this repository deploys it):
 - [ ] As a guest: create a group, add people, add an expense of each split type; balances and the plan are correct.
 - [ ] Sign up; the "Keep the groups from this device?" dialog moves the guest group into the account.
 - [ ] Invite a second account by its @username as one of the group's people; it accepts from its Groups page, the
-      group appears, and an expense added there shows up in the first browser within a second.
+      group appears, and an expense added there shows up in the first browser without a reload.
 - [ ] The second account cannot invite people, rename the group, change its currency or delete it, and can leave.
 - [ ] With the first browser's bell panel closed, add an expense in the second: a dot appears on the first browser's
       bell; opening it lists the expense at the top, clears the dot, and clicking it opens that group.
 - [ ] Password reset emails a 6-digit code that leads to the new-password page; refreshing any page does not 404.
-- [ ] Create a group while signed in: you appear in People, Who paid and Split between straight away.
+- [ ] Create a group while signed in: you appear in Participants, Who paid and Split between straight away.
 - [ ] Add people → Add by username: the second account's bell shows "… invited you to join …" with a count; the owner
-      can include them in an expense before they accept; accepting from the bell opens the group, and People shows
+      can include them in an expense before they accept; accepting from the bell opens the group, and Participants shows
       them as a Member (no duplicate person). Decline/revoke updates both browsers without a reload.
 - [ ] Settings → Delete account on a throwaway account: blocked while it owns a shared group; after deleting that
       group (and signing in again if asked), it is deleted, signed out, and its photo URL no longer loads.
@@ -397,14 +404,14 @@ Deploy it by hand (nothing in this repository deploys it):
 
 | Suite | What it proves | Command |
 |---|---|---|
-| Unit (Vitest) | Split, balance and settlement maths (exact cents, random property tests), money input parsing, name and username rules, CSV escaping, backup and storage sanitising, cents mapping, reducer transitions, photo checks, sign-in redirects, activity text | `npm run test:unit` |
+| Unit (Vitest) | Split, balance and settlement maths (exact cents, random property tests), balances and the settle-up summary in words, money input parsing, name and username rules, removed people in old expenses, email masking, CSV escaping, backup and storage sanitising, cents mapping, reducer transitions, photo checks, sign-in redirects, activity text | `npm run test:unit` |
 | Hook (Vitest + mocked API) | Optimistic updates, rollback with an error message when the server rejects a write, live refresh, guest-to-account import, account data never written to the device | `npm run test:unit` |
-| App (Vitest + jsdom) | Routing and readable group addresses, adding people and an expense, settlement shown, 404 pages, sign-in and code screens, account settings and photo upload, the people list (creator added on create, add by username with safe look-up results, add guest, resend, revoke, keep as guest, add yourself), invitations on the Groups page and in the bell (count, accept, decline, stale removal, other tabs), activity (live updates without duplicates, access filtering, keyboard), onboarding and empty states, policy pages and links, account deletion (blocked, confirmed, re-sign-in, failure) | `npm run test:unit` |
-| Database (PGlite) | The real migrations: RLS isolation between users (and RLS on every table), anonymous access denied, validation triggers, sharing rules, activity log, usernames and rate limits, invitations, people and add-by-username, invitation signals, account deletion (blocking, cleanup, shared history), avatar Storage policies, rollback scripts, upgrades of existing data, SQL balances equal JS balances; plus the `delete-account` Edge Function's handler with fake clients | `npm run test:db` |
-| Browser (Playwright) | Production build in Chromium on desktop and a phone viewport: full guest flow, persistence after reload, per-group currency, every URL loads, money input rules, sign-in address cleanup and sign-up form, photo re-encoding and refusals, guests see no sharing or bell, welcome and dismissal, the Add people dialog by keyboard, policy pages and links, empty states, no console errors, no sideways scrolling | `npm run test:e2e` |
+| App (Vitest + jsdom) | Routing and readable group addresses, adding people and an expense from the Add expense dialog, the group summary and settlement in words, refusing to edit an old expense that names a removed person, 404 pages, sign-in and code screens, Settings (section menu and focus, account rows, masked email, theme) and photo upload, the participants list (creator added on create, add by username with safe look-up results, add guest, resend, revoke, keep as guest, add yourself), invitations on the Groups page and in the bell (count, accept, decline, stale removal, other tabs), activity (live updates without duplicates, access filtering, keyboard), onboarding and empty states, policy pages and links, account deletion (blocked, confirmed, re-sign-in, failure) | `npm run test:unit` |
+| Database (PGlite) | The real migrations: RLS isolation between users (and RLS on every table), anonymous access denied, validation triggers, sharing rules, activity log, usernames and rate limits, invitations, people and add-by-username, invitation signals, account deletion (blocking, cleanup, shared history), avatar Storage policies, rollback scripts, upgrades of existing data, SQL balances equal JS balances, removing a settled person keeps old expenses and balances unchanged; plus the `delete-account` Edge Function's handler with fake clients | `npm run test:db` |
+| Browser (Playwright) | Production build in Chromium on desktop and a phone viewport: full guest flow, persistence after reload, per-group currency, every URL loads, money input rules, sign-in address cleanup and sign-up form, photo re-encoding and refusals, guests see no sharing or bell, welcome and dismissal, the Add people dialog by keyboard, the Add expense dialog, Settings section menu by keyboard and theme, policy pages and footer links, empty states, no console errors, no sideways scrolling | `npm run test:e2e` |
 
-454 Vitest test cases (337 unit, hook, app and rollback-compatibility tests in `src`; 117 database and Edge Function
-tests) plus 18 Playwright scenarios, each run on a desktop and a phone viewport (36 browser runs). What is **not**
+476 Vitest test cases (358 unit, hook, app and rollback-compatibility tests in `src`; 118 database and Edge Function
+tests) plus 20 Playwright scenarios, each run on a desktop and a phone viewport (40 browser runs). What is **not**
 automated: real email delivery, Supabase Realtime itself, signed-in flows in a real browser (the browser tests run
 without a Supabase project) and the deployed Edge Function (checked by hand with the checklist above).
 
@@ -427,6 +434,10 @@ revoked shows the database's reason and nothing changes. The activity bell has l
   to a group owner (exact match only, rate limited).
 - **No ownership transfer.** An owner whose group other members use must delete that group before deleting their
   account.
+- **People are referenced by name in expenses.** A settled person can be removed while old expenses still name them.
+  The app refuses to edit such an expense, and the database refuses to save one that names someone not in the group,
+  but deleting such an old expense or payment is still allowed and can leave the removed person with a balance that
+  cannot be settled until they are added back. A database-level rule for this is not built yet.
 - **A deleted account's @username is free at once**, and its name stays as a person in other people's groups (their
   expenses refer to it).
 - **Same-expense edits are last-writer-wins.** Two members editing the *same* expense at the same moment: the later

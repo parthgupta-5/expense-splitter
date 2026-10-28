@@ -15,6 +15,7 @@ import { MemoryRouter, useLocation } from 'react-router';
 import App from './App';
 import { AppProvider } from './state/AppContext';
 import * as repo from './data/cloudRepo';
+import { buttonIn, findHeading, preloadLazyModules } from './test/app';
 
 const mocks = vi.hoisted(() => ({ auth: {} }));
 
@@ -122,13 +123,14 @@ const signIn = (id, groups, profile = {}) => {
   });
 };
 
-beforeAll(() => {
+beforeAll(async () => {
   window.matchMedia = window.matchMedia || ((query) => ({
     matches: false, media: query, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},
     dispatchEvent() { return false; },
   }));
   window.ResizeObserver = window.ResizeObserver || class { observe() {} unobserve() {} disconnect() {} };
   window.scrollTo = () => {};
+  await preloadLazyModules();
 });
 beforeEach(() => {
   store = new Map();
@@ -157,10 +159,8 @@ const renderAt = (path) => render(
     <AppProvider><App /><Location /></AppProvider>
   </MemoryRouter>,
 );
-// A *ByRole query reads the computed style of every element it searches, and jsdom recomputes styles (Ant Design's many
-// rules) after each DOM change, so a page-wide role query costs about a second, more on CI, and inside waitFor it
-// re-runs on every change of an opening dialog. These helpers wait on cheap text, then run role queries once and only
-// inside the small part of the page that matters.
+// Waits poll cheap text and DOM queries; role queries run once, inside the small part of the page that matters (see
+// src/test/app.js for why).
 const dialogTitled = (title) => screen.queryAllByText(title)
   .map((node) => node.closest('[role="dialog"]'))
   .find((dialog) => dialog && !isInaccessible(dialog)) || null;
@@ -168,7 +168,7 @@ const findDialog = async (title) => {
   await waitFor(() => expect(dialogTitled(title)).toBeTruthy());
   return dialogTitled(title);
 };
-const peopleList = async () => (await screen.findByText('People in Goa trip')).closest('.people-card');
+const peopleList = async () => (await findHeading('Participants', 2)).closest('.people-card');
 const rowOf = (card, name) => Array.from(card.querySelectorAll('.person-row'))
   .find((row) => row.querySelector('.person-name strong')?.textContent === name);
 const waitForRow = async (name, text) => {
@@ -245,34 +245,32 @@ describe('owner: the people list', () => {
     [{ status: 'cooldown', username: 'old_pal', retry_on: '5 Nov 2026' }, '@old_pal declined recently. You can invite them again on 5 Nov 2026.'],
     [{ status: 'invited_before', username: 'old_pal', person_name: 'Pal', last_status: 'expired' }, '@old_pal was invited before as Pal (expired). Use Resend on Pal in the people list.'],
   ];
-  const expectLookups = async (cases) => {
+  const openLookup = async () => {
     const user = userEvent.setup();
     signIn(OWNER, [group('owner')]);
     renderAt('/groups/goa-trip');
-    const dialog = await openAddPeople(user);
-    for (const [result, message] of cases) {
-      repo.findInvitee.mockResolvedValueOnce(result);
-      await find(user, dialog, 'abc');
-      expect((await resultCard(dialog)).textContent).toContain(message);
-      expect(dialog.querySelector('.invitee-add')).toBeNull();
-    }
-    return { user, dialog };
+    return { user, dialog: await openAddPeople(user) };
   };
 
-  it('explains unknown usernames, yourself, people already in the group and pending invitations; no way to add them', async () => {
-    await expectLookups(LOOKUPS.slice(0, 4));
+  // Unknown usernames, yourself, people already in the group, pending invitations, a recent decline and an earlier
+  // invitation: each is explained, and there is no way to add them.
+  it.each(LOOKUPS)('explains a lookup that cannot be added: %j', async (result, message) => {
+    const { user, dialog } = await openLookup();
+    repo.findInvitee.mockResolvedValueOnce(result);
+    await find(user, dialog, 'abc');
+    expect((await resultCard(dialog)).textContent).toContain(message);
+    expect(dialog.querySelector('.invitee-add')).toBeNull();
   });
 
-  it('explains a recent decline and an earlier invitation, a malformed username and a rate limit', async () => {
-    const { user, dialog } = await expectLookups(LOOKUPS.slice(4));
-    // A malformed username is explained before asking the server; a rate limit is explained after.
-    const calls = repo.findInvitee.mock.calls.length;
+  it('explains a malformed username before asking the server, and a rate limit after', async () => {
+    const { user, dialog } = await openLookup();
     await find(user, dialog, 'a');
     await waitFor(() => expect(dialog.textContent).toMatch(/Use 3–20 characters/));
-    expect(repo.findInvitee).toHaveBeenCalledTimes(calls);
+    expect(repo.findInvitee).not.toHaveBeenCalled();
     repo.findInvitee.mockRejectedValueOnce(new Error('Too many attempts. Please wait a few minutes and try again.'));
     await find(user, dialog, 'abc');
     await waitFor(() => expect(dialog.textContent).toContain('Too many attempts. Please wait a minute and try again.'));
+    expect(dialog.querySelector('.invitee-add')).toBeNull();
   });
 
   it('shows the database\'s reason when adding fails, and adds nothing', async () => {
@@ -404,7 +402,8 @@ describe('creating a group when signed in', () => {
     repo.fetchGroup.mockReturnValue(new Promise((resolve) => { resolveFetch = resolve; }));
     repo.listGroupPeople.mockResolvedValue([]);
     renderAt('/groups');
-    await user.click(await screen.findByRole('button', { name: /create your first group/i }));
+    const welcome = (await findHeading('Welcome to Expense Splitter', 2)).closest('.welcome-panel');
+    await user.click(buttonIn(welcome, /create your first group/i));
     const dialog = await findDialog('Create a group');
     await user.type(within(dialog).getByLabelText(/group name/i), 'Goa trip');
     await user.click(within(dialog).getByRole('button', { name: /create group/i }));
@@ -414,7 +413,8 @@ describe('creating a group when signed in', () => {
     // Shown before the server's copy arrives.
     const card = await peopleList();
     await waitFor(() => expect(rowOf(card, 'Asha Rao')?.textContent).toMatch(/\(you\)/));
-    const form = document.getElementById('add-expense');
+    await user.click(buttonIn(document.querySelector('.group-toolbar'), /add expense/i));
+    const form = (await findDialog('Add an expense')).querySelector('#add-expense');
     await user.click(within(form).getByLabelText(/who paid/i));
     expect((await screen.findAllByTitle('Asha Rao')).length).toBeGreaterThan(0);
     // "Split between" starts with everyone, which here is only the creator: it is not empty.
@@ -425,13 +425,17 @@ describe('creating a group when signed in', () => {
 });
 
 describe('member', () => {
-  it('cannot add by username, see who an invitation is for, rename the group or change its currency', async () => {
-    const user = userEvent.setup();
+  const asMember = () => {
     signIn(FRIEND, [group('member')]);
     repo.listGroupPeople.mockResolvedValue(ownerStatuses().map((row) => ({
       ...row, invitation_id: null, invitee_username: null, invitee_name: null, responded_at: null,
     })));
     renderAt('/groups/goa-trip');
+  };
+
+  it('cannot add by username or see who an invitation is for', async () => {
+    const user = userEvent.setup();
+    asMember();
     const chitra = await waitForRow('Chitra', 'Invitation pending');
     expect(chitra.textContent).not.toMatch(/other_one/);
     expect(within(chitra).queryByRole('button')).toBeNull();
@@ -441,9 +445,12 @@ describe('member', () => {
     await user.click(within(dialog).getAllByText('Add by username')[0]);
     expect(within(dialog).getByText('Only the group owner can add people by username. You can still add a guest.')).toBeTruthy();
     expect(within(dialog).queryByLabelText(/their username/i)).toBeNull();
-    await user.click(within(dialog).getByRole('button', { name: /close/i }));
+  });
 
-    const actions = within((await screen.findByText('Members')).closest('.page-intro-extra'));
+  it('cannot invite or remove members, rename the group or change its currency, and can leave', async () => {
+    const user = userEvent.setup();
+    asMember();
+    const actions = within((await screen.findByText('Members')).closest('.group-header-actions'));
     await user.click(actions.getByRole('button', { name: /members/i }));
     const share = await findDialog('Only the owner can invite or remove members.');
     expect(share.textContent).not.toMatch(/@example\.com/);
@@ -471,7 +478,7 @@ describe('invitee: Groups page', () => {
     repo.acceptInvitation.mockResolvedValue({ group_id: 'g-9', person_name: 'Ben', status: 'accepted' });
     repo.fetchGroup.mockResolvedValue({ ...group('member'), id: 'g-9', name: 'Flat rent' });
     renderAt('/groups');
-    const panel = (await screen.findByRole('heading', { level: 2, name: 'Invitations for you (1)' })).closest('.invitations-panel');
+    const panel = (await findHeading('Invitations for you (1)', 2)).closest('.invitations-panel');
     expect(within(panel).getByText('Flat rent')).toBeTruthy();
     expect(within(panel).getByText('· join as Ben')).toBeTruthy();
     expect(within(panel).getAllByText('From Owner (@owner_one)')).toHaveLength(2);
@@ -491,7 +498,7 @@ describe('invitee: Groups page', () => {
     repo.listMyInvitations.mockResolvedValueOnce([pending]).mockResolvedValue([{ ...pending, status: 'declined' }]);
     repo.declineInvitation.mockResolvedValue({ status: 'declined' });
     renderAt('/groups');
-    const panel = (await screen.findByRole('heading', { level: 2, name: /Invitations for you/ })).closest('.invitations-panel');
+    const panel = (await findHeading('Invitations for you (1)', 2)).closest('.invitations-panel');
     await user.click(within(panel).getByRole('button', { name: 'Decline' }));
     expect(await screen.findByText(/not be able to invite you as this person again for 7 days/)).toBeTruthy();
     expect(repo.declineInvitation).not.toHaveBeenCalled();
@@ -507,7 +514,7 @@ describe('invitee: Groups page', () => {
     repo.listMyInvitations.mockResolvedValue([pending]);
     repo.acceptInvitation.mockRejectedValue(new Error('This invitation has expired. Ask the owner to invite you again.'));
     renderAt('/groups');
-    const panel = (await screen.findByRole('heading', { level: 2, name: 'Invitations for you (1)' })).closest('.invitations-panel');
+    const panel = (await findHeading('Invitations for you (1)', 2)).closest('.invitations-panel');
     await user.click(within(panel).getByRole('button', { name: 'Accept' }));
     expect(await screen.findByText('This invitation has expired. Ask the owner to invite you again.')).toBeTruthy();
     expect(screen.getByTestId('location').textContent).toBe('/groups');
@@ -521,8 +528,7 @@ describe('invitations in the notification bell', () => {
   };
   const bellButton = () => document.querySelector('.activity-bell button');
   const bellLabelBecomes = async (label) => {
-    await screen.findByRole('button', { name: /^Notifications/ });
-    await waitFor(() => expect(bellButton().getAttribute('aria-label')).toBe(label));
+    await waitFor(() => expect(bellButton()?.getAttribute('aria-label')).toBe(label));
   };
   const openBell = async (user) => {
     await user.click(bellButton());

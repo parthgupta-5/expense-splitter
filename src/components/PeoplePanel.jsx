@@ -123,11 +123,15 @@ export default function PeoplePanel({ group, onAddGuests, onRemove }) {
 
   const count = entries.length;
   return (
-    <section className="section-card people-card" aria-labelledby="people-heading">
+    <section className="section-card people-card" id="participants" aria-labelledby="people-heading">
       <div className="section-heading">
         <div>
-          <Title level={4} id="people-heading">People in {group.name}</Title>
-          <Text type="secondary">{count} {count === 1 ? 'person' : 'people'}</Text>
+          <Title level={2} id="people-heading" className="people-title" tabIndex={-1}>Participants</Title>
+          <Text type="secondary" className="people-help">
+            {cloud
+              ? "The people in this group's expenses. Members are the accounts that can open the group."
+              : "The people in this group's expenses."}
+          </Text>
         </div>
         <Button type="primary" icon={<UserAddOutlined />} onClick={() => setAdding({ mode: isOwner ? 'username' : 'guest' })}>
           Add people
@@ -149,7 +153,7 @@ export default function PeoplePanel({ group, onAddGuests, onRemove }) {
           No one here yet. Add the people who share costs in this group, then record your first expense.
         </p>
       ) : (
-        <ul className="people-rows" aria-label={'People in ' + group.name}>
+        <ul className="people-rows" aria-label={'Participants in ' + group.name}>
           {entries.map((entry) => {
             const { tag, detail } = statusOf(entry);
             const actions = actionsFor(entry);

@@ -5,7 +5,7 @@ import {
   afterEach, beforeAll, beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import {
-  cleanup, render, screen, waitFor, within,
+  cleanup, isInaccessible, render, screen, waitFor, within,
 } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router';
@@ -13,6 +13,9 @@ import App from './App';
 import { AppProvider } from './state/AppContext';
 import * as repo from './data/cloudRepo';
 import { STATE_KEY, newGroup } from './lib/storage';
+import {
+  buttonIn, findHeading, findRegion, preloadLazyModules,
+} from './test/app';
 
 const mocks = vi.hoisted(() => ({
   auth: {
@@ -51,13 +54,14 @@ const confirmed = {
 };
 const provisional = { ...confirmed, username: 'user_ab12cd34', username_confirmed_at: null };
 
-beforeAll(() => {
+beforeAll(async () => {
   window.matchMedia = window.matchMedia || ((query) => ({
     matches: false, media: query, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},
     dispatchEvent() { return false; },
   }));
   window.ResizeObserver = window.ResizeObserver || class { observe() {} unobserve() {} disconnect() {} };
   window.scrollTo = () => {};
+  await preloadLazyModules();
 });
 beforeEach(() => {
   const store = new Map();
@@ -82,8 +86,10 @@ function Location() {
 }
 
 // antd gives every element the id "test-id" under test, so a dialog's accessible name is unreliable here:
-// find dialogs by the title they show instead.
-const dialogTitled = (title) => screen.queryAllByRole('dialog').find((dialog) => within(dialog).queryByText(title)) || null;
+// find dialogs by the title they show instead (a text query, cheap enough to poll; see src/test/app.js).
+const dialogTitled = (title) => screen.queryAllByText(title)
+  .map((node) => node.closest('[role="dialog"]'))
+  .find((dialog) => dialog && !isInaccessible(dialog)) || null;
 const findDialog = async (title) => {
   await waitFor(() => expect(dialogTitled(title)).toBeTruthy());
   return dialogTitled(title);
@@ -96,19 +102,58 @@ const renderAt = (path) => render(
 );
 
 describe('Settings when signed in', () => {
-  it('shows the account first: name, @username, email (to its owner), status and sign-out', async () => {
+  it('shows the account first: name and @username once, masked email with its status, photo and sign-out', async () => {
     renderAt('/settings');
-    const account = await screen.findByRole('heading', { level: 2, name: 'Asha Rao' });
-    const section = account.closest('.account-card');
-    expect(section.parentElement.firstElementChild).toBe(section); // first in the panel
-    const scope = within(section);
-    expect(scope.getAllByText('@asha_rao').length).toBeGreaterThan(0);
-    expect(scope.getByText('asha@example.com')).toBeTruthy();
-    expect(scope.getByText('Signed in')).toBeTruthy();
-    expect(scope.getByText('Email verified')).toBeTruthy();
-    expect(scope.getByRole('button', { name: /sign out/i })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Sign in or create account' })).toBeNull();
+    const card = (await findHeading('Asha Rao', 3)).closest('.account-card');
+    const section = card.closest('.settings-section');
+    expect(section.id).toBe('account');
+    expect(section.parentElement.firstElementChild).toBe(section); // first in the settings
+    const scope = within(card);
+    expect(scope.getAllByText('@asha_rao')).toHaveLength(1); // in the header only, not repeated in the rows
+    expect(scope.getByText('a•••@example.com')).toBeTruthy();
+    expect(card.textContent).not.toMatch(/asha@example\.com/); // masked, even for its owner
+    expect(scope.getByText('Verified')).toBeTruthy();
+    expect(buttonIn(card, /sign out/i)).toBeTruthy();
+    expect(buttonIn(card, 'Upload photo')).toBeTruthy();
+    expect(buttonIn(card, 'Change username')).toBeTruthy();
+    expect(screen.queryByText('Sign in or create account')).toBeNull();
     expect(screen.queryByText('Choose your username')).toBeNull();
+  });
+
+  it('groups everything under Account, Preferences and Data, with a menu that moves focus to each section', async () => {
+    const user = userEvent.setup();
+    renderAt('/settings');
+    await findHeading('Asha Rao', 3);
+    const menu = document.querySelector('nav.settings-nav');
+    expect(menu.getAttribute('aria-label')).toBe('Settings sections');
+    const links = within(menu).getAllByRole('link');
+    expect(links.map((link) => link.textContent)).toEqual(['Account', 'Preferences', 'Data']);
+    expect(links[0].getAttribute('aria-current')).toBe('true');
+
+    await user.click(links[2]);
+    expect(document.activeElement.id).toBe('data-heading');
+    expect(links[2].getAttribute('aria-current')).toBe('true');
+    expect(links[0].getAttribute('aria-current')).toBeNull();
+
+    const data = within(document.getElementById('data'));
+    expect(data.getByRole('button', { name: /download backup/i })).toBeTruthy();
+    expect(data.getByRole('button', { name: /import backup/i })).toBeTruthy();
+    const preferences = document.getElementById('preferences');
+    expect(within(preferences).getByLabelText('Default currency')).toBeTruthy();
+    expect(Array.from(preferences.querySelectorAll('.ant-segmented-item-label'), (node) => node.textContent))
+      .toEqual(['Light', 'Dark']);
+    // Delete account sits apart, after the three sections.
+    expect(document.querySelector('.settings-content').lastElementChild.id).toBe('delete-account');
+  });
+
+  it('switches between the light and dark themes from Preferences', async () => {
+    const user = userEvent.setup();
+    renderAt('/settings');
+    const preferences = (await findHeading('Preferences', 2)).closest('.settings-section');
+    await user.click(within(preferences).getByText('Dark'));
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('dark'));
+    await user.click(within(preferences).getByText('Light'));
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe('light'));
   });
 
   it('offers a password change to email accounts, and not to Google-only accounts', async () => {
@@ -116,14 +161,15 @@ describe('Settings when signed in', () => {
     const original = mocks.auth.user;
     mocks.auth.user = { ...original, app_metadata: { providers: ['email'] } };
     renderAt('/settings');
-    await user.click(await screen.findByRole('button', { name: 'Change password' }));
-    expect(await screen.findByRole('heading', { level: 1, name: 'Choose a new password' })).toBeTruthy();
+    await user.click(buttonIn(await findRegion('Sign-in method', '.settings-row'), 'Change password'));
+    expect(await findHeading('Choose a new password', 1)).toBeTruthy();
     cleanup();
 
     mocks.auth.user = { ...original, app_metadata: { providers: ['google'] } };
     renderAt('/settings');
-    expect(await screen.findByText('You sign in with Google')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Change password' })).toBeNull();
+    const method = (await screen.findByText('You sign in with Google')).closest('.settings-row');
+    expect(method.textContent).toMatch(/^Sign-in methodGoogle/);
+    expect(screen.queryByText('Change password')).toBeNull();
     mocks.auth.user = original;
   });
 
@@ -134,9 +180,9 @@ describe('Settings when signed in', () => {
     const field = await screen.findByLabelText(/display name/i);
     await user.clear(field);
     await user.type(field, 'Asha R');
-    await user.click(screen.getByRole('button', { name: 'Save name' }));
+    await user.click(buttonIn(field.closest('form'), 'Save name'));
     await waitFor(() => expect(repo.saveProfile).toHaveBeenCalledWith('user-1', { display_name: 'Asha R' }));
-    expect(await screen.findByRole('heading', { level: 2, name: 'Asha R' })).toBeTruthy();
+    expect(await findHeading('Asha R', 3)).toBeTruthy();
   });
 
   it('changes the username from Settings, and shows when it can next change', async () => {
@@ -144,7 +190,7 @@ describe('Settings when signed in', () => {
     repo.fetchProfile.mockResolvedValue({ ...confirmed, username_changed_at: new Date().toISOString() });
     repo.setUsername.mockResolvedValue({ username: 'asha_r', username_confirmed_at: confirmed.username_confirmed_at });
     renderAt('/settings');
-    await user.click(await screen.findByRole('button', { name: 'Change' }));
+    await user.click(buttonIn(await findRegion('Username', '.settings-row'), 'Change username'));
     const dialog = await findDialog('Change your username');
     expect(within(dialog).getByText(/You can choose a new username again on/)).toBeTruthy();
     const field = within(dialog).getByLabelText('Username');
@@ -161,7 +207,7 @@ describe('Settings when signed in', () => {
     const user = userEvent.setup();
     repo.setUsername.mockRejectedValue(new Error('That username is taken'));
     renderAt('/settings');
-    await user.click(await screen.findByRole('button', { name: 'Change' }));
+    await user.click(buttonIn(await findRegion('Username', '.settings-row'), 'Change username'));
     const dialog = await findDialog('Change your username');
     const field = within(dialog).getByLabelText('Username');
     await user.clear(field);
@@ -174,7 +220,7 @@ describe('Settings when signed in', () => {
 describe('/profile when signed in', () => {
   it('redirects to the account section in Settings', async () => {
     renderAt('/profile');
-    expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeTruthy();
+    expect(await findHeading('Settings', 1)).toBeTruthy();
     expect(screen.getByTestId('location').textContent).toBe('/settings#account');
     expect(screen.queryByRole('heading', { level: 1, name: 'Your account' })).toBeNull();
   });
@@ -230,7 +276,7 @@ describe('required username dialog', () => {
     mocks.auth.recovering = true;
     try {
       renderAt('/settings');
-      expect(await screen.findByRole('heading', { level: 1, name: 'Choose a new password' })).toBeTruthy();
+      expect(await findHeading('Choose a new password', 1)).toBeTruthy();
       expect(screen.getByTestId('location').textContent).toBe('/reset-password');
       await expect(findDialog('Choose your username')).rejects.toThrow();
     } finally {
@@ -242,7 +288,7 @@ describe('required username dialog', () => {
     const { username: _u, username_confirmed_at: _c, username_changed_at: _d, ...legacy } = confirmed;
     repo.fetchProfile.mockResolvedValue(legacy);
     renderAt('/settings');
-    expect(await screen.findByRole('heading', { level: 2, name: 'Asha Rao' })).toBeTruthy();
+    expect(await findHeading('Asha Rao', 3)).toBeTruthy();
     expect(dialogTitled('Choose your username')).toBeNull();
   });
 });

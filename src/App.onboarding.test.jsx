@@ -14,6 +14,9 @@ import App from './App';
 import { AppProvider } from './state/AppContext';
 import * as repo from './data/cloudRepo';
 import { STATE_KEY, newGroup } from './lib/storage';
+import {
+  buttonIn, findButton, findHeading, preloadLazyModules,
+} from './test/app';
 
 const mocks = vi.hoisted(() => ({ auth: {}, configured: true }));
 
@@ -72,13 +75,14 @@ const asGuest = () => {
 };
 
 let store;
-beforeAll(() => {
+beforeAll(async () => {
   window.matchMedia = window.matchMedia || ((query) => ({
     matches: false, media: query, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},
     dispatchEvent() { return false; },
   }));
   window.ResizeObserver = window.ResizeObserver || class { observe() {} unobserve() {} disconnect() {} };
   window.scrollTo = () => {};
+  await preloadLazyModules();
 });
 beforeEach(() => {
   store = new Map();
@@ -116,7 +120,7 @@ describe('first-time welcome (signed in)', () => {
     signIn();
     renderAt('/');
     await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/groups'));
-    const panel = within(await screen.findByRole('heading', { level: 2, name: 'Welcome to Expense Splitter' }).then((h) => h.closest('.welcome-panel')));
+    const panel = within((await findHeading('Welcome to Expense Splitter', 2)).closest('.welcome-panel'));
     expect(panel.getByText(/You are added automatically\. Add friends by their @username/)).toBeTruthy();
     expect(panel.getByText(/Settle up/)).toBeTruthy();
     expect(screen.queryByText(/No groups yet/)).toBeNull(); // the welcome replaces the empty state
@@ -179,7 +183,7 @@ describe('first-time welcome (guest)', () => {
     asGuest();
     store.set(STATE_KEY, JSON.stringify({ groups: [{ ...newGroup('Old trip'), people: ['Asha'] }] }));
     renderAt('/');
-    expect(await screen.findByRole('heading', { level: 1, name: 'Old trip' })).toBeTruthy();
+    expect(await findHeading('Old trip', 1)).toBeTruthy();
     expect(welcome()).toBeNull();
   });
 });
@@ -190,8 +194,10 @@ describe('empty states', () => {
     signIn({ groups: [cloudGroup()] });
     renderAt('/groups/goa-trip');
     const empty = (await screen.findByText(/No expenses yet\. Record the first one/)).closest('.ant-empty');
-    await user.click(within(empty).getByRole('button', { name: 'Add an expense' }));
+    await user.click(buttonIn(empty, 'Add an expense'));
     await waitFor(() => expect(document.activeElement?.closest('#add-expense')).toBeTruthy());
+    expect(document.activeElement.closest('[role="dialog"]').textContent).toMatch(/^Add an expense/);
+    expect(document.activeElement.id).toBe('expense_description');
   });
 
   it('a group with nobody in it says who to add', async () => {
@@ -214,7 +220,7 @@ describe('privacy policy and terms', () => {
   it('are public pages with honest, specific content', async () => {
     asGuest();
     renderAt('/privacy');
-    expect(await screen.findByRole('heading', { level: 1, name: 'Privacy Policy' })).toBeTruthy();
+    expect(await findHeading('Privacy Policy', 1)).toBeTruthy();
     expect(screen.getByText('A plain-language policy for a project app, not legal advice.')).toBeTruthy();
     const deletion = document.getElementById('deletion');
     expect(deletion.textContent).toMatch(/Former member/);
@@ -226,21 +232,25 @@ describe('privacy policy and terms', () => {
 
     cleanup();
     renderAt('/terms');
-    expect(await screen.findByRole('heading', { level: 1, name: 'Terms of Service' })).toBeTruthy();
+    expect(await findHeading('Terms of Service', 1)).toBeTruthy();
     expect(document.getElementById('service').textContent).toMatch(/does not move money/);
   });
 
-  it('are linked from every page footer, Settings and the sign-up form', async () => {
+  it('are linked from every page footer (Settings included) and the sign-up form', async () => {
     const user = userEvent.setup();
     asGuest();
     renderAt('/settings');
-    const footer = within(await screen.findByRole('navigation', { name: 'Policies' }));
+    const nav = (await screen.findByText('Privacy Policy')).closest('nav');
+    expect(nav.getAttribute('aria-label')).toBe('Policies');
+    expect(nav.closest('footer')).toBeTruthy();
+    const footer = within(nav);
     expect(footer.getByRole('link', { name: 'Privacy Policy' }).getAttribute('href')).toBe('/privacy');
     expect(footer.getByRole('link', { name: 'Terms of Service' }).getAttribute('href')).toBe('/terms');
-    const settings = within((await screen.findByText('Privacy and terms')).closest('.setting-card'));
-    expect(settings.getByRole('link', { name: 'Privacy Policy' })).toBeTruthy();
+    // Settings itself has no separate policies section: the footer is on every page, Settings included.
+    expect(screen.queryByText('Privacy and terms')).toBeNull();
+    expect(document.querySelector('.settings-content a[href="/privacy"], .settings-content a[href="/terms"]')).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: 'Sign in or create account' }));
+    await user.click(await findButton('Sign in or create account'));
     const form = (await screen.findByText(/By creating an account you agree to the/)).closest('.auth-legal');
     expect(within(form).getByRole('link', { name: 'Terms of Service' }).getAttribute('target')).toBe('_blank');
 
@@ -251,7 +261,7 @@ describe('privacy policy and terms', () => {
   it('can be read before choosing a username: the required dialog does not cover them', async () => {
     signIn({ prof: profile({ username: 'user_ab12cd34', username_confirmed_at: null }) });
     renderAt('/privacy');
-    expect(await screen.findByRole('heading', { level: 1, name: 'Privacy Policy' })).toBeTruthy();
+    expect(await findHeading('Privacy Policy', 1)).toBeTruthy();
     await waitFor(() => expect(repo.fetchProfile).toHaveBeenCalled());
     expect(screen.queryByText('Choose your username')).toBeNull();
   });

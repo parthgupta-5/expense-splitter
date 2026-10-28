@@ -255,6 +255,41 @@ describe('person removal: the app and the database agree to the paisa', () => {
   });
 });
 
+describe('an old expense that names a removed person', () => {
+  it('keeps its record and every balance when the person is removed, and cannot be saved still naming them', async () => {
+    const db = await createDatabase();
+    const asha = await createUser(db, 'Asha');
+    const groupId = await createGroup(db, asha, { people: ['Asha', 'Ben', 'Dee'] });
+    // Asha paid 300.00 for all three; Dee paid her 100.00 back, so Dee is settled and may be removed.
+    const split = { Asha: 10000, Ben: 10000, Dee: 10000 };
+    let expenseId;
+    await as(db, asha, async (tx) => {
+      expenseId = (await insertExpense(tx, groupId, { amount: 30000, split })).rows[0].id;
+      await insertPayment(tx, groupId, 'Dee', 'Asha', 10000);
+    });
+    const balances = async () => (await as(db, asha, (tx) => tx.query(
+      'select name, balance_cents from group_balances($1)', [groupId],
+    ))).rows.map((row) => [row.name, Number(row.balance_cents)]);
+    const before = [['Asha', 10000], ['Ben', -10000], ['Dee', 0]];
+    expect(await balances()).toEqual(before);
+
+    expect(await errorAs(db, asha, (tx) => tx.query(
+      'delete from group_people where group_id = $1 and name = $2', [groupId, 'Dee'],
+    ))).toBeNull();
+    // The history is untouched: the expense still records Dee's share, and nobody's balance moved.
+    const stored = await as(db, asha, (tx) => tx.query('select split_details from expenses where id = $1', [expenseId]));
+    expect(stored.rows[0].split_details).toEqual(split);
+    expect(await balances()).toEqual(before);
+
+    // Saving the expense as it is (still naming Dee) is refused. An edit could only have been saved by dropping Dee and
+    // moving her share onto Asha and Ben, which the app refuses to do (src/hooks/useExpenseForm.js).
+    expect(await errorAs(db, asha, (tx) => tx.query(
+      "update expenses set description = 'Team dinner' where id = $1", [expenseId],
+    ))).toBe('Dee is not in this group');
+    expect(await balances()).toEqual(before);
+  });
+});
+
 describe('sharing', () => {
   let db; let owner; let friend; let stranger; let groupId;
   beforeAll(async () => {

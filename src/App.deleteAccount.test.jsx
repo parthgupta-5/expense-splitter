@@ -14,6 +14,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router';
 import App from './App';
 import { AppProvider } from './state/AppContext';
+import { findHeading, preloadLazyModules } from './test/app';
 import * as repo from './data/cloudRepo';
 
 const mocks = vi.hoisted(() => ({ auth: {} }));
@@ -62,13 +63,14 @@ const signIn = ({ providers = ['email'] } = {}) => {
 };
 
 let store;
-beforeAll(() => {
+beforeAll(async () => {
   window.matchMedia = window.matchMedia || ((query) => ({
     matches: false, media: query, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},
     dispatchEvent() { return false; },
   }));
   window.ResizeObserver = window.ResizeObserver || class { observe() {} unobserve() {} disconnect() {} };
   window.scrollTo = () => {};
+  await preloadLazyModules();
 });
 beforeEach(() => {
   store = new Map([['expenseSplitterActivitySeenV1', JSON.stringify({ [ME]: 4, other: 9 })]]);
@@ -100,7 +102,7 @@ const renderAt = (path) => render(
   </MemoryRouter>,
 );
 const openDialog = async (user) => {
-  const area = (await screen.findByRole('heading', { level: 2, name: 'Delete account' })).closest('.danger-card');
+  const area = (await findHeading('Delete account', 2)).closest('.danger-card');
   await user.click(within(area).getByRole('button', { name: /delete account/i }));
   await waitFor(() => expect(screen.queryAllByText('Delete your account?').some((node) => !isInaccessible(node))).toBe(true));
   return screen.getAllByText('Delete your account?').map((node) => node.closest('[role="dialog"]')).find(Boolean);
@@ -126,7 +128,7 @@ describe('delete account: where and what', () => {
       user: null, ready: true, recovering: false, signOut: () => Promise.resolve(), updateDisplayName: () => Promise.resolve(),
     };
     renderAt('/settings');
-    expect(await screen.findByRole('heading', { level: 1, name: 'Settings' })).toBeTruthy();
+    expect(await findHeading('Settings', 1)).toBeTruthy();
     expect(screen.queryByText('Delete account')).toBeNull();
   });
 });

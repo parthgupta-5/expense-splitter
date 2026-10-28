@@ -53,7 +53,7 @@ describe('balances and settlements', () => {
     Object.values(balances).forEach((b) => expect(allIntegers(b)).toBe(true));
   });
 
-  it('settlement plan clears every balance with the fewest transfers', () => {
+  it('settlement plan clears every balance with at most N−1 transfers', () => {
     const balances = computeBalances(people, expenses, []);
     const plan = computeSettlements(balances);
     expect(plan.length).toBeLessThanOrEqual(people.length - 1);

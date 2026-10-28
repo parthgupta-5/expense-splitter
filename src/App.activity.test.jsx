@@ -13,6 +13,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router';
 import App from './App';
 import { AppProvider } from './state/AppContext';
+import { preloadLazyModules } from './test/app';
 import * as repo from './data/cloudRepo';
 
 const mocks = vi.hoisted(() => ({ auth: {} }));
@@ -81,13 +82,14 @@ const signIn = (groups = [GOA, FLAT]) => {
   });
 };
 
-beforeAll(() => {
+beforeAll(async () => {
   window.matchMedia = window.matchMedia || ((query) => ({
     matches: false, media: query, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},
     dispatchEvent() { return false; },
   }));
   window.ResizeObserver = window.ResizeObserver || class { observe() {} unobserve() {} disconnect() {} };
   window.scrollTo = () => {};
+  await preloadLazyModules();
 });
 beforeEach(() => {
   store = new Map();
@@ -114,7 +116,11 @@ const renderAt = (path = '/groups') => render(
     <AppProvider><App /><Location /></AppProvider>
   </MemoryRouter>,
 );
-const bell = () => screen.findByRole('button', { name: /^Notifications/ });
+// The bell's button, once shown; its accessible name always starts with "Notifications".
+const bell = async () => {
+  await waitFor(() => expect(document.querySelector('.activity-bell button')?.getAttribute('aria-label')).toMatch(/^Notifications/));
+  return document.querySelector('.activity-bell button');
+};
 // Finds the bell once, then polls only its label. Re-running a page-wide role query inside waitFor keeps a slow
 // machine too busy to deliver the very data being waited for.
 const bellLabelBecomes = async (label) => {
@@ -145,7 +151,7 @@ describe('activity bell: who sees it', () => {
       user: null, ready: true, recovering: false, signOut: () => Promise.resolve(), updateDisplayName: () => Promise.resolve(),
     };
     renderAt();
-    await screen.findByRole('link', { name: 'Sign in' });
+    expect((await screen.findByText('Sign in')).closest('a').getAttribute('aria-label')).toBe('Sign in');
     expect(screen.queryByRole('button', { name: /^Notifications/ })).toBeNull();
     expect(repo.fetchActivity).not.toHaveBeenCalled();
     expect(repo.subscribeToChanges).not.toHaveBeenCalled();

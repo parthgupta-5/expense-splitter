@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import {
-  Alert, Button, Card, Form, Input, Modal, Typography,
+  Alert, Button, Form, Input, Modal, Typography,
 } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import { useApp } from '../state/AppContext';
+import { SettingRow, SettingsSection } from './SettingsSection';
 import * as repo from '../data/cloudRepo';
 import { friendlyError } from '../lib/errors';
 import { rememberReturnPath } from '../lib/authRedirect';
@@ -12,7 +13,7 @@ import { groupPath } from '../lib/groupSlug';
 import { forgetAccountOnDevice } from '../lib/storage';
 import { normalizeUsername } from '../lib/username';
 
-const { Paragraph, Text, Title } = Typography;
+const { Paragraph, Text } = Typography;
 
 /** The groups that block deletion, each linked to its page (where Group settings → Delete group is). */
 function Blockers({ names, groups, onOpen }) {
@@ -210,21 +211,18 @@ function DeleteAccountDialog({ open, onClose }) {
   );
 }
 
-/** Settings: a separate, clearly destructive area at the end of the page. */
+/** Settings: a separate, clearly destructive area at the end of the page, below a divider. */
 export default function DeleteAccount() {
   const [open, setOpen] = useState(false);
   return (
-    <Card className="setting-card danger-card" id="delete-account">
-      <section aria-labelledby="delete-account-heading" className="danger-card-body">
-        <div className="setting-copy">
-          <Title level={2} id="delete-account-heading" className="danger-card-title">Delete account</Title>
-          <Text type="secondary">
-            Permanently delete your account and personal data. Groups other members use must be deleted first.
-          </Text>
-        </div>
+    <SettingsSection id="delete-account" title="Delete account" className="danger-card">
+      <SettingRow
+        label="Delete your account"
+        help="Permanently delete your account and personal data. Shared groups may need to be resolved first."
+      >
         <Button danger icon={<DeleteOutlined />} onClick={() => setOpen(true)}>Delete account…</Button>
-      </section>
+      </SettingRow>
       {open && <DeleteAccountDialog open onClose={() => setOpen(false)} />}
-    </Card>
+    </SettingsSection>
   );
 }

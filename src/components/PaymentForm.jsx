@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Divider, Form, Select } from 'antd';
+import { Button, Form, Select } from 'antd';
 import { SwapOutlined } from '@ant-design/icons';
 import { parseMoneyInput } from '../lib/money';
 import { paymentExceedsOwed } from '../lib/splits';
@@ -39,10 +39,10 @@ export default function PaymentForm({ people, balances, currencySymbol, onAddPay
   };
 
   return (
-    <>
-      <Divider titlePlacement="start" plain>Record a payment</Divider>
-      <div className="payment-entry">
-        <Form form={form} layout="inline" onFinish={record} className="payment-form" aria-label="Record a payment">
+    <section className="payment-entry" aria-labelledby="record-payment-heading">
+      <h3 id="record-payment-heading" className="payment-title">Record a payment</h3>
+      <div>
+        <Form form={form} name="payment" layout="inline" onFinish={record} className="payment-form" aria-label="Record a payment">
           <Form.Item name="payer" rules={[{ required: true, message: 'Choose who paid' }]}>
             <Select placeholder="From" options={options} className="payment-select" aria-label="Payment from" />
           </Form.Item>
@@ -56,6 +56,6 @@ export default function PaymentForm({ people, balances, currencySymbol, onAddPay
           <Form.Item><Button type="primary" htmlType="submit" ghost>Record payment</Button></Form.Item>
         </Form>
       </div>
-    </>
+    </section>
   );
 }

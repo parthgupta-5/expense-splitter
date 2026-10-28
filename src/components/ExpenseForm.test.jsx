@@ -20,13 +20,15 @@ afterEach(cleanup);
 
 const people = ['Asha', 'Ben', 'Chitra'];
 
-function Harness({ onSave, expenses = [] }) {
+function Harness({ onSave, expenses = [], names = people }) {
   const [notify, messageHolder] = message.useMessage();
-  const expenseForm = useExpenseForm({ people, expenses, notify, onSave });
+  const expenseForm = useExpenseForm({
+    people: names, expenses, notify, onSave,
+  });
   return (
     <>
       {messageHolder}
-      <ExpenseForm expenseForm={expenseForm} people={people} currencySymbol="₹" />
+      <ExpenseForm expenseForm={expenseForm} people={names} currencySymbol="₹" />
       {expenses.map((expense) => (
         <button key={expense.id} type="button" onClick={() => expenseForm.edit(expense.id)}>Edit {expense.description}</button>
       ))}
@@ -34,7 +36,9 @@ function Harness({ onSave, expenses = [] }) {
   );
 }
 
-const renderForm = (onSave, expenses) => render(<AntApp><Harness onSave={onSave} expenses={expenses} /></AntApp>);
+const renderForm = (onSave, expenses, names) => render(
+  <AntApp><Harness onSave={onSave} expenses={expenses} names={names} /></AntApp>,
+);
 const amountField = () => screen.getByLabelText(/total amount/i);
 // Per-person fields in the split editor (the payer list also mentions each name).
 const splitField = (person) => within(document.querySelector('.split-editor')).getByLabelText(person);
@@ -55,7 +59,7 @@ describe('ExpenseForm', () => {
   it('shows required-field errors and saves nothing when empty', async () => {
     const onSave = vi.fn();
     renderForm(onSave);
-    await userEvent.click(screen.getByRole('button', { name: /add expense/i }));
+    await userEvent.click(screen.getByRole('button', { name: /save expense/i }));
     expect(await screen.findByText('Add a short description')).toBeTruthy();
     expect(screen.getByText('Choose who paid')).toBeTruthy();
     expect(screen.getByText('Enter the total')).toBeTruthy();
@@ -101,7 +105,7 @@ describe('ExpenseForm', () => {
     renderForm(onSave);
     await fillBasics(user, '10.555');
     expect(await screen.findByText('Use at most 2 decimal places')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: /add expense/i }));
+    await user.click(screen.getByRole('button', { name: /save expense/i }));
     expect(amountField().value).toBe('10.555');
     expect(onSave).not.toHaveBeenCalled();
   });
@@ -111,7 +115,7 @@ describe('ExpenseForm', () => {
     const onSave = vi.fn().mockResolvedValue(true);
     renderForm(onSave);
     await fillBasics(user, '10.55');
-    await user.click(screen.getByRole('button', { name: /add expense/i }));
+    await user.click(screen.getByRole('button', { name: /save expense/i }));
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     const [expense] = onSave.mock.calls[0];
     expect(expense).toMatchObject({
@@ -131,14 +135,14 @@ describe('ExpenseForm', () => {
     expect(asha.getAttribute('inputmode')).toBe('decimal');
     await user.type(asha, '3.335');
     expect(await screen.findByText('Use at most 2 decimal places')).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: /add expense/i }));
+    await user.click(screen.getByRole('button', { name: /save expense/i }));
     expect(onSave).not.toHaveBeenCalled();
 
     await user.clear(asha);
     await user.type(asha, '3.34');
     await user.type(splitField('Ben'), '3.33');
     await user.type(splitField('Chitra'), '3.33');
-    await user.click(screen.getByRole('button', { name: /add expense/i }));
+    await user.click(screen.getByRole('button', { name: /save expense/i }));
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
     const [expense] = onSave.mock.calls[0];
     expect(expense).toMatchObject({ amountCents: 1000, splitType: 'unequal', splitCents: { Asha: 334, Ben: 333, Chitra: 333 } });
@@ -164,5 +168,41 @@ describe('ExpenseForm', () => {
       id: 'old', amountCents: 9000, splitType: 'shares', splitCents: { Asha: 3000, Ben: 6000, Chitra: 0 },
       splitValues: { Asha: 1, Ben: 2, Chitra: 0 }, createdAt: saved.createdAt,
     });
+  });
+
+  // Dee shared this dinner, was settled up and then removed from the group.
+  const withDee = {
+    id: 'old', description: 'Dinner', payer: 'Asha', amountCents: 40000, splitType: 'equal', category: 'Other',
+    splitCents: {
+      Asha: 10000, Ben: 10000, Chitra: 10000, Dee: 10000,
+    },
+    participants: [...people, 'Dee'],
+    createdAt: '2026-01-01T00:00:00.000Z',
+  };
+
+  it('refuses to edit an expense that involves someone who was removed, instead of re-splitting it', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(true);
+    renderForm(onSave, [withDee]);
+    await user.click(screen.getByRole('button', { name: 'Edit Dinner' }));
+    expect(await screen.findByText('This expense involves Dee, who was removed. Add them back before editing this expense.')).toBeTruthy();
+    // The form stays empty and in "add" mode: the old expense was never loaded, so it cannot be saved re-split.
+    expect(amountField().value).toBe('');
+    expect(screen.queryByRole('button', { name: /save changes/i })).toBeNull();
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it('refuses to save an edit when someone in it was removed while the form was open', async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn().mockResolvedValue(true);
+    const before = { ...withDee, splitCents: { Asha: 20000, Ben: 10000, Chitra: 10000 }, participants: people };
+    const { rerender } = renderForm(onSave, [before]);
+    await user.click(screen.getByRole('button', { name: 'Edit Dinner' }));
+    expect(amountField().value).toBe('400.00');
+    // Another member removes Chitra (settled) while this form is open.
+    rerender(<AntApp><Harness onSave={onSave} expenses={[before]} names={['Asha', 'Ben']} /></AntApp>);
+    await user.click(screen.getByRole('button', { name: /save changes/i }));
+    expect(await screen.findByText('This expense involves Chitra, who was removed. Add them back before editing this expense.')).toBeTruthy();
+    expect(onSave).not.toHaveBeenCalled();
   });
 });

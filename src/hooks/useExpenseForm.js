@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Form } from 'antd';
 import { centsToDecimal, parseMoneyInput } from '../lib/money';
+import { listNames, removedPeopleIn } from '../lib/people';
 import { computeSplit, validateSplit } from '../lib/splits';
 import { makeId } from '../lib/storage';
 
@@ -42,6 +43,16 @@ export function useExpenseForm({ people, expenses, onSave, notify }) {
     setEditingId(null);
   };
 
+  // Never re-split a historical expense around someone who was removed: their share would silently move to others.
+  // Checked when editing starts and again on save (another member may remove someone while the form is open).
+  const refuseRemoved = (expense) => {
+    const removed = removedPeopleIn(expense, people);
+    if (!removed.length) return false;
+    notify.error(`This expense involves ${listNames(removed)}, who ${removed.length === 1 ? 'was' : 'were'} removed. `
+      + 'Add them back before editing this expense.');
+    return true;
+  };
+
   const changeSplitType = (value) => { setSplitType(value); setSplitValues({}); };
   const setSplitValue = (person, value) => setSplitValues((current) => ({ ...current, [person]: value }));
   const changeParticipants = (value) => setParticipantSel(value.length === people.length ? null : value);
@@ -59,6 +70,7 @@ export function useExpenseForm({ people, expenses, onSave, notify }) {
     const problem = validateSplit(splitType, total.cents, participants, inputs);
     if (problem) { notify.error(problem); return; }
     const previous = editingId === null ? null : expenses.find((item) => item.id === editingId);
+    if (previous && refuseRemoved(previous)) return;
     const now = new Date().toISOString();
     const expense = {
       id: previous?.id || makeId(),
@@ -83,9 +95,10 @@ export function useExpenseForm({ people, expenses, onSave, notify }) {
     reset();
   };
 
+  /** Loads an expense into the form. Returns false (and says why) when it cannot be edited. */
   const edit = (id) => {
     const expense = expenses.find((item) => item.id === id);
-    if (!expense) return;
+    if (!expense || refuseRemoved(expense)) return false;
     const split = expense.splitCents || {};
     const shares = Object.values(split);
     // Expenses saved before split types existed: equal when every share is within a cent of total / n.
@@ -117,7 +130,7 @@ export function useExpenseForm({ people, expenses, onSave, notify }) {
       category: expense.category || 'Other',
       note: expense.note || '',
     });
-    document.getElementById('add-expense')?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    return true;
   };
 
   return {

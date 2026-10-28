@@ -76,7 +76,8 @@ export function computeBalances(people, expenses, payments) {
 }
 
 /**
- * Greedy minimal-transfer plan: repeatedly match the largest debtor with the largest creditor.
+ * Greedy settlement plan: repeatedly match the largest debtor with the largest creditor. Every payment settles at least
+ * one person, so N people need at most N−1 payments. That is a bound, not a guarantee of the fewest possible payments.
  * Balances are exact cents, so anyone not at exactly zero (even one paisa) is part of the plan.
  */
 export function computeSettlements(balances) {

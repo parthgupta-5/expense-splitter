@@ -35,7 +35,7 @@ export default function WelcomePanel({ guest = false }) {
             : ' You are added automatically. Add friends by their @username (they get an invitation) or as guests.'}
         </li>
         <li><Text strong>Record expenses:</Text> who paid, and who shares it.</li>
-        <li><Text strong>Settle up</Text> with the fewest payments.</li>
+        <li><Text strong>Settle up</Text> with a suggested plan: at most N−1 payments for N people.</li>
       </ol>
       {guest && (
         <Paragraph type="secondary" className="welcome-note">

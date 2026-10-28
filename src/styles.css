@@ -134,17 +134,6 @@ body{background:var(--page)}
 .ant-alert .ant-alert-title{font-weight:600}
 .ant-alert .ant-alert-description{margin-top:4px;line-height:1.5}
 
-/* Settings rows: the copy is a column (title above help), the control sits beside it on desktop and below it on phones. */
-.settings-panel{display:flex;flex-direction:column;gap:12px}
-.settings-panel .setting-card{margin:0}
-.settings-panel .setting-card .ant-card-body{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:32px;row-gap:14px;min-height:0;padding:20px 24px}
-.settings-panel .setting-copy{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:4px;min-width:0;min-height:0}
-.settings-panel .setting-copy .ant-typography{display:block;font:700 16px/1.35 'Manrope',sans-serif;color:var(--ink)}
-.settings-panel .setting-copy .ant-typography.ant-typography-secondary{margin:0;font:400 14px/1.5 'DM Sans',sans-serif;color:var(--muted);max-width:52ch;overflow-wrap:anywhere}
-.settings-panel .setting-card .ant-select{width:260px}
-.settings-panel .setting-card .ant-space{justify-content:flex-end}
-.settings-panel .setting-card .ant-btn,.settings-panel .setting-card .ant-select-selector{min-height:44px}
-
 /* People list: name, avatar and actions share one centre line. */
 .saved-people-list .ant-list-item{align-items:center;gap:12px}
 .saved-people-list .ant-list-item-meta{align-items:center}
@@ -153,10 +142,6 @@ body{background:var(--page)}
 .saved-people-list .ant-list-item-action{display:flex;align-items:center;margin-inline-start:12px}
 .saved-people-list .ant-btn{min-height:44px}
 
-/* Group page: figures stay on one line; on phones the spend card gets the widest column. */
-.stat-card .ant-statistic-content{white-space:nowrap}
-.stat-card .ant-statistic-title{line-height:1.3}
-
 /* Profile and auth */
 .profile-panel .auth-prompt{margin:0 0 18px}
 .auth-prompt p,.auth-prompt .ant-typography{line-height:1.55}
@@ -164,20 +149,9 @@ body{background:var(--page)}
 @media(max-width:700px){
   .page-intro{margin-bottom:20px}
   .page-panel{padding:16px 14px}
-  .settings-panel{padding:12px}
-  .settings-panel .setting-card .ant-card-body{grid-template-columns:1fr;padding:16px}
-  .settings-panel .setting-card .ant-select{width:100%}
-  .settings-panel .setting-card .ant-space{width:100%;justify-content:flex-start}
-  .settings-panel .setting-card .ant-space-item{flex:1 1 100%}
-  .settings-panel .setting-card .ant-space .ant-btn,.settings-panel .setting-card .ant-upload,.settings-panel .setting-card .ant-upload .ant-btn{display:flex;width:100%;justify-content:center}
-  .settings-panel .setting-card>.ant-card-body>.ant-btn,.settings-panel .setting-card>.ant-card-body>.ant-tag{justify-self:start}
   .ant-alert.ant-alert-with-description,.ant-alert{flex-wrap:wrap}
   .ant-alert .ant-alert-section{flex:1 1 calc(100% - 40px);min-width:0}
   .ant-alert .ant-alert-actions{flex:0 0 100%;margin:12px 0 0 32px}
-  .activity-card .ant-table-thead>tr>th:first-child,.activity-card .ant-table-tbody>tr>td:first-child{min-width:150px}
-  .stats-row>.ant-col:first-child{flex:0 0 46%;max-width:46%}
-  .stats-row>.ant-col:not(:first-child){flex:0 0 27%;max-width:27%}
-  .stat-card .ant-statistic-content{font-size:19px}
 }
 @media(max-width:700px){
   .ant-btn,.ant-input,.ant-input-number,.ant-select-selector{min-height:44px}
@@ -201,7 +175,6 @@ body{background:var(--page)}
 :root .user-avatar-tone-1{background:color-mix(in srgb,var(--ink) 18%,var(--surface))}
 :root .user-avatar-tone-2{background:color-mix(in srgb,var(--ink) 26%,var(--surface))}
 :root .user-avatar-tone-3{background:color-mix(in srgb,var(--ink) 34%,var(--surface))}
-.settings-panel .account-card .ant-card-body{display:block;padding:24px}
 .account-header{display:flex;align-items:center;gap:16px;margin-bottom:18px}
 .account-identity{display:flex;flex-direction:column;gap:2px;min-width:0}
 .account-title.ant-typography{margin:0;font:700 22px/1.25 'Manrope',sans-serif;color:var(--ink);overflow-wrap:anywhere}
@@ -217,7 +190,6 @@ body{background:var(--page)}
 .username-availability{display:block;min-height:20px}
 .username-cooldown{padding:10px 12px;border-radius:10px;background:var(--soft)}
 @media(max-width:700px){
-  .settings-panel .account-card .ant-card-body{padding:16px}
   .account-details>div{grid-template-columns:1fr;gap:4px}
   .account-actions .ant-btn,.username-actions .ant-btn{flex:1 1 100%}
 }
@@ -274,7 +246,6 @@ body{background:var(--page)}
 /* People, invitations, onboarding, policies and account deletion. Monochrome tokens only: green stays for success,
    red for destructive actions and errors. */
 .people-card .section-heading{align-items:center}
-.people-card .section-heading h4.ant-typography{margin:0}
 .people-rows{margin:0;padding:0;list-style:none;border-top:1px solid var(--line)}
 .person-row{display:flex;align-items:center;gap:12px;padding:10px 2px;border-bottom:1px solid var(--line);min-width:0}
 .person-main{display:flex;flex-direction:column;gap:2px;flex:1 1 auto;min-width:0}
@@ -330,9 +301,6 @@ body{background:var(--page)}
 .auth-legal a{color:inherit;text-decoration:underline}
 
 .danger-card{border-color:color-mix(in srgb,var(--line),#d4380d 35%)}
-.settings-panel .danger-card .ant-card-body{display:block}
-.danger-card-body{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
-.danger-card-title.ant-typography{margin:0;font:700 16px/1.35 'Manrope',sans-serif;color:var(--ink)}
 .delete-account-list{margin:4px 0 12px;padding-left:20px}
 .delete-blockers,.delete-problem{margin:12px 0}
 .delete-blockers-list{margin:0;padding-left:20px}
@@ -346,5 +314,117 @@ body{background:var(--page)}
   .person-actions{margin-left:auto}
   .people-card .section-heading{flex-direction:row;flex-wrap:wrap;gap:10px}
   .legal-toc ol{columns:1}
-  .danger-card-body .ant-btn{width:100%}
+}
+
+/* Settings: a section menu beside one panel of divider-separated sections; on phones the menu is a row of three
+   buttons above it. Monochrome tokens only; red only on the delete-account divider and button. */
+.settings-layout{display:grid;grid-template-columns:176px minmax(0,1fr);gap:32px;align-items:start;max-width:980px}
+.settings-nav{position:sticky;top:96px}
+.settings-nav ul{display:flex;flex-direction:column;gap:2px;margin:0;padding:0;list-style:none}
+.settings-nav-link{display:block;padding:9px 12px;border-radius:10px;color:var(--muted);font-size:14px;font-weight:600;text-decoration:none;transition:background-color .18s ease,color .18s ease}
+.settings-nav-link:hover{background:var(--soft);color:var(--ink)}
+.settings-nav-link.is-active{background:var(--surface);color:var(--ink);box-shadow:inset 3px 0 0 var(--ink)}
+.settings-nav-link:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.settings-content{min-width:0;padding:4px 28px;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+.settings-section{padding:24px 0;border-top:1px solid var(--line);scroll-margin-top:96px}
+.settings-section:first-child{border-top:0}
+.settings-section-title{margin:0 0 4px;font:700 17px/1.3 'Manrope',sans-serif;letter-spacing:-.2px;color:var(--ink)}
+.settings-section-title:focus{outline:none}
+.settings-section-title:focus-visible{outline:2px solid var(--ink);outline-offset:4px;border-radius:4px}
+.settings-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px 32px;padding:14px 0;border-bottom:1px solid var(--line)}
+.settings-row:last-child{border-bottom:0}
+.settings-row-copy{display:flex;flex-direction:column;gap:2px;min-width:0}
+.settings-row-label{font-weight:600;color:var(--ink)}
+.settings-row-help{max-width:52ch;font-size:13px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere}
+.settings-row-control{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px;min-width:0}
+.settings-select{width:240px}
+.settings-actions{justify-content:flex-end}
+.danger-card{border-top-color:color-mix(in srgb,var(--line),#d4380d 45%)}
+
+/* Account (first in Settings): avatar, name and @username once, photo controls, then aligned rows. */
+.account-header{align-items:flex-start;margin:0;padding:12px 0 16px;border-bottom:1px solid var(--line)}
+.account-identity{flex:1 1 auto;gap:2px}
+.account-title{margin:0;font:700 18px/1.3 'Manrope',sans-serif;color:var(--ink);overflow-wrap:anywhere}
+.account-identity .profile-photo{margin-top:8px}
+.account-signout{flex:none}
+.account-email{display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px;overflow-wrap:anywhere}
+.account-email .ant-tag{margin:0}
+.settings-row.account-name-form{max-width:none}
+.account-name-control{flex-wrap:nowrap}
+.account-name-control .ant-form-item{flex:1 1 220px;margin:0;min-width:0}
+
+/* Group workspace: compact header, three figures, one primary action, tabs, then the participants. */
+.group-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin:0 0 20px}
+.group-heading{min-width:0}
+.group-title{margin:0;font:800 clamp(26px,4vw,34px)/1.15 'Manrope',sans-serif;letter-spacing:-1px;color:var(--ink);overflow-wrap:anywhere}
+.group-subtitle{margin:6px 0 0;font-size:14px;color:var(--muted)}
+.group-header-actions{display:flex;gap:8px;flex:none}
+.group-summary{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.8fr) minmax(0,1.7fr);margin:0 0 16px;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+.summary-item{display:flex;flex-direction:column;gap:6px;min-width:0;padding:16px 20px}
+.summary-item+.summary-item{border-left:1px solid var(--line)}
+.summary-item dt{font-size:12px;font-weight:600;color:var(--muted)}
+.summary-item dd{display:flex;flex-direction:column;align-items:flex-start;gap:3px;min-width:0;margin:0}
+.summary-value{font:700 22px/1.2 'Manrope',sans-serif;color:var(--ink);white-space:nowrap}
+.summary-sentence{font-size:17px;line-height:1.3;white-space:normal;overflow-wrap:anywhere}
+.summary-detail{font-size:12px;color:var(--muted)}
+.summary-link{padding:0;border:0;background:none;color:var(--ink);font:inherit;font-size:12px;font-weight:600;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.summary-link:focus-visible{outline:2px solid var(--ink);outline-offset:2px;border-radius:4px}
+.group-toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin:0 0 4px}
+.group-toolbar-secondary{display:flex;flex-wrap:wrap;gap:4px}
+.group-toolbar-secondary .ant-btn:not(:disabled){color:var(--muted)}
+.group-toolbar-secondary .ant-btn:not(:disabled):hover{color:var(--ink)}
+.group-tabs{padding:8px 24px 16px}
+.group-tabs:focus{outline:none}
+.group-tabs:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.money-list{margin:0;padding:0;list-style:none}
+.money-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:4px 16px;padding:14px 0;border-bottom:1px solid var(--line)}
+.money-row:last-child{border-bottom:0}
+.money-row-main{display:flex;flex-direction:column;gap:3px;min-width:0}
+.money-row-title{font-weight:600;color:var(--ink);overflow-wrap:anywhere}
+.money-row-meta{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.money-row-shares{display:flex;flex-wrap:wrap;gap:2px 12px}
+.money-row-amount{font:700 16px/1.3 'Manrope',sans-serif;color:var(--ink);white-space:nowrap;text-align:right}
+.money-row-actions{display:flex;justify-content:flex-end;gap:2px}
+.money-list-pages{margin-top:12px;text-align:right}
+.list-empty{padding:28px 0}
+.balance-person{display:inline-flex;align-items:center;gap:8px}
+.balance-text{font-weight:600;color:var(--ink)}
+.balance-text.is-settled{font-weight:500;color:var(--muted)}
+.settlement-heading h3{margin:0;font:700 15px/1.3 'Manrope',sans-serif;color:var(--ink)}
+.settlement-count{font-size:12px;color:var(--muted)}
+.settlement-list{margin:0;padding:0;list-style:none}
+.settlement-row{gap:6px;font-size:14px}
+.settlement-verb{color:var(--muted)}
+.payment-title{margin:22px 0 12px;font:700 15px/1.3 'Manrope',sans-serif;color:var(--ink)}
+.people-title.ant-typography{margin:0 0 4px;font:700 18px/1.3 'Manrope',sans-serif;letter-spacing:-.2px;color:var(--ink)}
+.people-title:focus{outline:none}
+.people-title:focus-visible{outline:2px solid var(--ink);outline-offset:4px;border-radius:4px}
+.people-help{display:block;max-width:62ch;font-size:13px;line-height:1.5}
+
+@media(max-width:700px){
+  .settings-layout{grid-template-columns:1fr;gap:14px}
+  .settings-nav{position:static}
+  .settings-nav ul{flex-direction:row;gap:6px}
+  .settings-nav li{flex:1 1 0;min-width:0}
+  .settings-nav-link{padding:10px 6px;border:1px solid var(--line);text-align:center}
+  .settings-nav-link.is-active{border-color:var(--ink);box-shadow:none}
+  .settings-content{padding:0 16px}
+  .settings-section{padding:20px 0}
+  .settings-row{grid-template-columns:1fr}
+  .settings-row-control,.settings-actions{justify-content:flex-start}
+  .settings-select{width:100%}
+  .account-header{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 14px}
+  .account-signout{grid-column:2;justify-self:start}
+  .account-name-control{flex-wrap:wrap}
+  .account-name-control .ant-btn{flex:1 1 100%}
+  .group-header{flex-wrap:wrap}
+  .group-summary{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .summary-item{padding:12px 14px}
+  .summary-item.summary-settle{grid-column:1 / -1;border-left:0;border-top:1px solid var(--line)}
+  .summary-value{font-size:18px}
+  .summary-sentence{font-size:16px}
+  .group-toolbar>.ant-btn-primary{flex:1 1 100%}
+  .group-tabs{padding:4px 14px 12px}
+  .money-row{grid-template-columns:minmax(0,1fr) auto}
+  .money-row-main{grid-row:span 2}
 }
