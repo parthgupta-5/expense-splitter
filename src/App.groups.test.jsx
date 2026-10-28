@@ -11,17 +11,19 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router';
 import App from './App';
 import { AppProvider } from './state/AppContext';
+import { findHeading, preloadLazyModules } from './test/app';
 import { STATE_KEY, newGroup } from './lib/storage';
 
 vi.mock('./supabase', () => ({ supabase: null, supabaseConfigured: false, normalizeSupabaseUrl: () => '', supabaseUrl: '' }));
 
-beforeAll(() => {
+beforeAll(async () => {
   window.matchMedia = window.matchMedia || ((query) => ({
     matches: false, media: query, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},
     dispatchEvent() { return false; },
   }));
   window.ResizeObserver = window.ResizeObserver || class { observe() {} unobserve() {} disconnect() {} };
   window.scrollTo = () => {};
+  await preloadLazyModules();
 });
 
 const saved = [
@@ -51,7 +53,7 @@ const renderAt = (path) => render(
     <AppProvider><App /><Location /></AppProvider>
   </MemoryRouter>,
 );
-const heading = (name) => screen.findByRole('heading', { level: 1, name });
+const heading = (name) => findHeading(name, 1);
 
 describe('group addresses', () => {
   it('opens a group from its readable address', async () => {
@@ -92,7 +94,7 @@ describe('group addresses', () => {
     renderAt('/groups/flat-rent');
     await heading('Flat Rent');
     await user.click(screen.getByRole('button', { name: /group settings/i }));
-    const dialog = (await screen.findAllByRole('dialog')).find((item) => within(item).queryByText('Group settings'));
+    const dialog = (await screen.findByText('Group settings', { selector: '.ant-modal-title' })).closest('[role="dialog"]');
     const name = within(dialog).getByLabelText(/group name/i);
     await user.clear(name);
     await user.type(name, 'Home bills');

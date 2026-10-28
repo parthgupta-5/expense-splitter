@@ -14,22 +14,23 @@ import { readLastGroup } from './lib/storage';
 import { needsUsername } from './lib/username';
 import { CALLBACK_PATH } from './lib/authRedirect';
 import { findGroup, groupPath } from './lib/groupSlug';
+import { lazyModules } from './lazyModules';
 
 // Pages and dialogs load on demand, so the first download only contains what the current screen needs.
-const GroupPage = lazy(() => import('./pages/GroupPage'));
-const AuthModal = lazy(() => import('./components/AuthModal'));
-const GroupModal = lazy(() => import('./components/GroupModal'));
-const ImportGuestModal = lazy(() => import('./components/ImportGuestModal'));
-const UsernameDialog = lazy(() => import('./components/UsernameDialog'));
-const GroupsPage = lazy(() => import('./pages/GroupsPage'));
-const HistoryPage = lazy(() => import('./pages/HistoryPage'));
-const PeoplePage = lazy(() => import('./pages/PeoplePage'));
-const ProfilePage = lazy(() => import('./pages/ProfilePage'));
-const SettingsPage = lazy(() => import('./pages/SettingsPage'));
-const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
-const AuthCallbackPage = lazy(() => import('./pages/AuthCallbackPage'));
-const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
-const TermsPage = lazy(() => import('./pages/TermsPage'));
+const GroupPage = lazy(lazyModules.GroupPage);
+const AuthModal = lazy(lazyModules.AuthModal);
+const GroupModal = lazy(lazyModules.GroupModal);
+const ImportGuestModal = lazy(lazyModules.ImportGuestModal);
+const UsernameDialog = lazy(lazyModules.UsernameDialog);
+const GroupsPage = lazy(lazyModules.GroupsPage);
+const HistoryPage = lazy(lazyModules.HistoryPage);
+const PeoplePage = lazy(lazyModules.PeoplePage);
+const ProfilePage = lazy(lazyModules.ProfilePage);
+const SettingsPage = lazy(lazyModules.SettingsPage);
+const ResetPasswordPage = lazy(lazyModules.ResetPasswordPage);
+const AuthCallbackPage = lazy(lazyModules.AuthCallbackPage);
+const PrivacyPage = lazy(lazyModules.PrivacyPage);
+const TermsPage = lazy(lazyModules.TermsPage);
 // Public pages that never wait for account data (they need none) and are never covered by the username dialog.
 const LEGAL_PAGES = { '/privacy': PrivacyPage, '/terms': TermsPage };
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  describePeople, describeRejected, inviteeOutcome, parseNames, personLabel, removalStatus,
+  describePeople, describeRejected, inviteeOutcome, listNames, parseNames, personLabel, removalStatus, removedPeopleIn,
 } from './people';
 
 describe('parseNames', () => {
@@ -89,5 +89,30 @@ describe('inviteeOutcome', () => {
     }
     expect(inviteeOutcome({ status: 'self' }).text).toBe('That is you. Use “Add yourself” in the people list.');
     expect(inviteeOutcome({ status: 'invalid' }, { rules: 'Rules' }).text).toBe('Rules');
+  });
+});
+
+describe('removedPeopleIn', () => {
+  const expense = {
+    payer: 'Dee', splitCents: { Asha: 100, Dee: 100, Eli: 0 }, participants: ['Asha', 'Dee', 'Eli'],
+  };
+
+  it('lists who an old expense still names but the group no longer has, each once, payer first', () => {
+    expect(removedPeopleIn(expense, ['Asha', 'Ben'])).toEqual(['Dee', 'Eli']);
+    expect(removedPeopleIn({ ...expense, payer: 'Asha' }, ['Asha', 'Ben', 'Eli'])).toEqual(['Dee']);
+  });
+
+  it('is empty when everyone is still in the group, including older expenses without participants', () => {
+    expect(removedPeopleIn(expense, ['Asha', 'Dee', 'Eli'])).toEqual([]);
+    expect(removedPeopleIn({ payer: 'Asha', splitCents: { Asha: 50, Ben: 50 } }, ['Asha', 'Ben'])).toEqual([]);
+  });
+});
+
+describe('listNames', () => {
+  it('joins names the way a sentence does', () => {
+    expect(listNames(['Asha'])).toBe('Asha');
+    expect(listNames(['Asha', 'Ben'])).toBe('Asha and Ben');
+    expect(listNames(['Asha', 'Ben', 'Chitra'])).toBe('Asha, Ben and Chitra');
+    expect(listNames([])).toBe('');
   });
 });

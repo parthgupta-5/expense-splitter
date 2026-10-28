@@ -1,58 +1,74 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import {
-  Button, Card, Col, Result, Row, Statistic, Tag, Tooltip,
+  Button, Modal, Result, Tag, Tooltip,
 } from 'antd';
 import {
-  CheckCircleFilled, CloudOutlined, SettingOutlined, TeamOutlined,
+  CheckCircleFilled, CloudOutlined, DownloadOutlined, PlusOutlined, SaveOutlined, SettingOutlined, TeamOutlined,
 } from '@ant-design/icons';
 import { useApp } from '../state/AppContext';
 import { useExpenseForm } from '../hooks/useExpenseForm';
-import ActivityPanel from '../components/ActivityPanel';
 import ExpenseForm from '../components/ExpenseForm';
 import GroupSettingsModal from '../components/GroupSettingsModal';
+import GroupTabs from '../components/GroupTabs';
 import MembersModal from '../components/MembersModal';
-import PageIntro from '../components/PageIntro';
+import { useDocumentTitle } from '../components/PageIntro';
 import PaymentForm from '../components/PaymentForm';
 import PeoplePanel from '../components/PeoplePanel';
 import WelcomePanel from '../components/WelcomePanel';
 import { toCsv } from '../lib/csv';
 import { currencySymbol, formatCents } from '../lib/currency';
 import { downloadText } from '../lib/download';
-import { centsToDecimal, centsToDecimalNumber, sumCents } from '../lib/money';
+import { centsToDecimalNumber, sumCents } from '../lib/money';
 import { describeRejected, parseNames, removalStatus } from '../lib/people';
+import { settlementSummary } from '../lib/settlementText';
 import { computeBalances, computeSettlements } from '../lib/splits';
 import { makeId, writeLastGroup } from '../lib/storage';
 
 const EMPTY = [];
 
-function SaveStatus({ cloud }) {
-  return cloud
-    ? <Tag bordered={false} icon={<CloudOutlined />} color="blue">Saved to your account · live updates on</Tag>
-    : <Tag bordered={false} icon={<CheckCircleFilled />} color="success">Saved on this device</Tag>;
+/** Where the group is kept. "Live updates on" only while the live channel is actually connected. */
+function SaveStatus({ cloud, realtime }) {
+  if (!cloud) return <Tag bordered={false} icon={<CheckCircleFilled />} color="success">Saved on this device</Tag>;
+  return (
+    <Tag bordered={false} icon={<CloudOutlined />} color="blue">
+      {realtime === 'live' ? 'Saved to your account · live updates on' : 'Saved to your account'}
+    </Tag>
+  );
 }
 
-function useScrolled(threshold = 100) {
-  const [scrolled, setScrolled] = useState(false);
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > threshold);
-    onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, [threshold]);
-  return scrolled;
+/** "Shared · 2 members · INR", "1 member · INR" or "Saved on this device · INR". */
+function groupSubtitle(group) {
+  if (!group.cloud) return `Saved on this device · ${group.currencyCode}`;
+  const members = group.memberCount === 1 ? '1 member' : `${group.memberCount} members`;
+  return (group.memberCount > 1 ? 'Shared · ' : '') + members + ' · ' + group.currencyCode;
 }
 
-/** One group's page. `groupId` is the group's id (the route works out which group an address refers to). */
+/** Scrolls to an element and moves keyboard focus to it (it needs tabIndex -1). */
+const goTo = (id) => {
+  const target = document.getElementById(id);
+  const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  target?.scrollIntoView?.({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  target?.focus?.({ preventScroll: true });
+};
+
+/**
+ * One group's page: a compact header (name, sharing, currency, Members and Group settings), the three figures that
+ * matter (group spend, participants, what is left to settle, in words), Add expense as the main action, then the
+ * Expenses / Balances / Payments tabs and the participants. Adding or editing an expense happens in a dialog.
+ * `groupId` is the group's id (the route works out which group an address refers to).
+ */
 export default function GroupPage({ groupId }) {
   const {
-    workspace, notify, modal,
+    auth, workspace, notify, modal,
   } = useApp();
-  const { actions } = workspace;
+  const { actions, realtime } = workspace;
   const group = workspace.groups.find((item) => item.id === groupId);
   const [membersOpen, setMembersOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const isScrolled = useScrolled();
+  const [expenseOpen, setExpenseOpen] = useState(false);
+  const [tab, setTab] = useState('expenses');
+  useDocumentTitle(group?.name || 'Group not found');
 
   const people = group?.people ?? EMPTY;
   const expenses = group?.expenses ?? EMPTY;
@@ -64,12 +80,30 @@ export default function GroupPage({ groupId }) {
   const totalCents = sumCents(expenses.map((expense) => expense.amountCents));
   const formatMoney = (cents) => formatCents(cents, currencyCode);
   const symbol = currencySymbol(currencyCode);
+  // The signed-in user's own person in this group, if they are in its expenses (never in guest groups).
+  const me = group?.cloud
+    ? group.personRecords?.find((record) => record.userId && record.userId === auth.user?.id)?.name ?? null
+    : null;
 
   const expenseForm = useExpenseForm({
-    people, expenses, notify, onSave: (expense) => actions.saveExpense(groupId, expense),
+    people,
+    expenses,
+    notify,
+    onSave: async (expense) => {
+      const kept = await actions.saveExpense(groupId, expense);
+      if (kept) setExpenseOpen(false);
+      return kept;
+    },
   });
 
   useEffect(() => { if (group) writeLastGroup(group.id); }, [group]);
+
+  // The dialog's form stays mounted (so an edit can fill it before it opens); focus moves into it when it opens.
+  useEffect(() => {
+    if (!expenseOpen) return undefined;
+    const frame = requestAnimationFrame(() => document.querySelector('#add-expense input')?.focus({ preventScroll: true }));
+    return () => cancelAnimationFrame(frame);
+  }, [expenseOpen]);
 
   if (!group) {
     return (
@@ -121,9 +155,15 @@ export default function GroupPage({ groupId }) {
     });
   };
 
-  const goToExpenseForm = () => {
-    document.getElementById('add-expense')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-    document.querySelector('#add-expense input')?.focus({ preventScroll: true });
+  const addExpense = () => {
+    if (expenseForm.editingId !== null) expenseForm.reset(); // a closed edit never comes back as "Add"
+    setExpenseOpen(true);
+  };
+  const editExpense = (id) => { if (expenseForm.edit(id)) setExpenseOpen(true); };
+  // Closing keeps a half-typed new expense for next time, but never an edit.
+  const closeExpense = () => {
+    if (expenseForm.editingId !== null) expenseForm.reset();
+    setExpenseOpen(false);
   };
 
   const saveSplit = async () => {
@@ -168,71 +208,120 @@ export default function GroupPage({ groupId }) {
     }
   };
 
-  const shared = group.cloud && group.memberCount > 1;
+  const hasPeople = people.length > 0;
+  const nothingRecorded = !expenses.length && !payments.length;
+  const toSettle = settlementSummary(settlements, me, formatMoney);
 
   return (
     <>
-      <PageIntro
-        eyebrow="SHARED SPENDING"
-        title={group.name}
-        extra={(
-          <>
-            {shared && <Tag icon={<TeamOutlined />} color="purple">Shared · {group.memberCount} members</Tag>}
-            <Tag>{group.currencyCode}</Tag>
-            <Tooltip title={group.cloud ? 'Who can open and edit this group' : 'Sign in to share this group'}>
-              <Button size="small" icon={<TeamOutlined />} onClick={() => setMembersOpen(true)}>Members</Button>
-            </Tooltip>
-            <Button size="small" icon={<SettingOutlined />} onClick={() => setSettingsOpen(true)}>Group settings</Button>
-          </>
-        )}
-      />
-      {people.length > 0 && (
-        <Row gutter={[13, 13]} className={'stats-row ' + (isScrolled ? 'is-compact' : '')}>
-          <Col xs={8}>
-            <Card className="stat-card">
-              <Statistic title="Group spend" value={centsToDecimal(totalCents)} precision={2} prefix={symbol} />
-            </Card>
-          </Col>
-          <Col xs={8}><Card className="stat-card"><Statistic title="People" value={people.length} /></Card></Col>
-          <Col xs={8}><Card className="stat-card"><Statistic title="To settle" value={settlements.length} /></Card></Col>
-        </Row>
-      )}
+      <header className="group-header">
+        <div className="group-heading">
+          <h1 className="group-title">{group.name}</h1>
+          <p className="group-subtitle">{groupSubtitle(group)}</p>
+        </div>
+        <div className="group-header-actions">
+          <Tooltip title={group.cloud ? 'Accounts that can open and edit this group' : 'Sign in to share this group'}>
+            <Button icon={<TeamOutlined />} onClick={() => setMembersOpen(true)}>Members</Button>
+          </Tooltip>
+          <Tooltip title="Group settings">
+            <Button icon={<SettingOutlined />} aria-label="Group settings" onClick={() => setSettingsOpen(true)} />
+          </Tooltip>
+        </div>
+      </header>
+
       {!group.cloud && <WelcomePanel guest />}
-      <PeoplePanel group={group} onAddGuests={addGuests} onRemove={removePerson} />
-      {people.length > 0 && (
-        <div className="feature-content">
-          <section className="section-card" id="add-expense">
-            <ExpenseForm expenseForm={expenseForm} people={people} currencySymbol={symbol} />
-            <PaymentForm
-              people={people}
-              balances={balances}
-              currencySymbol={symbol}
-              onAddPayment={(payment) => actions.addPayment(groupId, payment)}
-              notify={notify}
-              modal={modal}
-            />
+
+      {hasPeople && (
+        <>
+          <section aria-labelledby="group-summary-heading">
+            <h2 id="group-summary-heading" className="visually-hidden">Summary</h2>
+            <dl className="group-summary">
+              <div className="summary-item">
+                <dt>Group spend</dt>
+                <dd><span className="summary-value">{formatMoney(totalCents)}</span></dd>
+              </div>
+              <div className="summary-item">
+                <dt>Participants</dt>
+                <dd>
+                  <span className="summary-value">{people.length}</span>
+                  <button type="button" className="summary-link" onClick={() => goTo('people-heading')}>View list</button>
+                </dd>
+              </div>
+              <div className="summary-item summary-settle">
+                <dt>To settle</dt>
+                <dd>
+                  <span className="summary-value summary-sentence">{toSettle.headline}</span>
+                  <span className="summary-detail">{toSettle.detail}</span>
+                  <button type="button" className="summary-link" onClick={() => { setTab('balances'); goTo('group-tabs'); }}>
+                    View balances
+                  </button>
+                </dd>
+              </div>
+            </dl>
           </section>
-          <ActivityPanel
+
+          <div className="group-toolbar">
+            <Button type="primary" size="large" icon={<PlusOutlined />} onClick={addExpense}>Add expense</Button>
+            <div className="group-toolbar-secondary">
+              <Tooltip title={nothingRecorded ? 'Add an expense or payment first' : 'Save a snapshot of this split'}>
+                <Button type="text" icon={<SaveOutlined />} disabled={nothingRecorded} onClick={saveSplit}>Save split</Button>
+              </Tooltip>
+              <Button type="text" icon={<DownloadOutlined />} onClick={exportCsv}>Export CSV</Button>
+            </div>
+          </div>
+
+          <GroupTabs
+            activeTab={tab}
+            onTabChange={setTab}
             expenses={expenses}
             payments={payments}
             balances={balances}
             settlements={settlements}
             formatMoney={formatMoney}
-            onEditExpense={expenseForm.edit}
+            onEditExpense={editExpense}
             onDeleteExpense={async (id) => {
               if (await actions.deleteExpense(groupId, id)) notify.success('Expense deleted');
             }}
             onDeletePayment={async (id) => {
               if (await actions.deletePayment(groupId, id)) notify.success('Payment removed');
             }}
-            onAddExpense={goToExpenseForm}
-            onSaveSplit={saveSplit}
-            onExportCsv={exportCsv}
+            onAddExpense={addExpense}
             onCopySummary={copySummary}
+            paymentForm={(
+              <PaymentForm
+                people={people}
+                balances={balances}
+                currencySymbol={symbol}
+                onAddPayment={(payment) => actions.addPayment(groupId, payment)}
+                notify={notify}
+                modal={modal}
+              />
+            )}
+          />
+        </>
+      )}
+
+      <PeoplePanel group={group} onAddGuests={addGuests} onRemove={removePerson} />
+      <footer className="page-footer"><SaveStatus cloud={group.cloud} realtime={realtime} /></footer>
+
+      <Modal
+        title={expenseForm.editingId !== null ? 'Edit expense' : 'Add an expense'}
+        open={expenseOpen}
+        onCancel={closeExpense}
+        footer={null}
+        width={720}
+        forceRender
+        className="expense-modal"
+      >
+        <div id="add-expense">
+          <ExpenseForm
+            expenseForm={expenseForm}
+            people={people}
+            currencySymbol={symbol}
+            onCancelEdit={closeExpense}
           />
         </div>
-      )}
-      <footer className="page-footer"><SaveStatus cloud={group.cloud} /></footer>
+      </Modal>
       <MembersModal group={group} open={membersOpen} onClose={() => setMembersOpen(false)} />
       <GroupSettingsModal group={group} open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </>

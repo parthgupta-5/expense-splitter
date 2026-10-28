@@ -4,14 +4,18 @@ import { TeamOutlined } from '@ant-design/icons';
 
 const { Text, Title } = Typography;
 
-/** Page heading; also sets the browser tab title so history entries and bookmarks are meaningful. */
-export default function PageIntro({
-  eyebrow = 'EXPENSE SPLITTER', title, documentTitle, extra,
-}) {
-  const tabTitle = documentTitle || (typeof title === 'string' ? title : '');
+/** Sets the browser tab title, so history entries and bookmarks are meaningful. */
+export function useDocumentTitle(title) {
   useEffect(() => {
-    document.title = tabTitle ? tabTitle + ' · Expense Splitter' : 'Expense Splitter';
-  }, [tabTitle]);
+    document.title = title ? title + ' · Expense Splitter' : 'Expense Splitter';
+  }, [title]);
+}
+
+/** Page heading; also sets the browser tab title. `icon={false}` leaves out the decorative tile (compact pages). */
+export default function PageIntro({
+  eyebrow = 'EXPENSE SPLITTER', title, documentTitle, extra, icon = true,
+}) {
+  useDocumentTitle(documentTitle || (typeof title === 'string' ? title : ''));
 
   return (
     <div className="page-intro">
@@ -20,7 +24,7 @@ export default function PageIntro({
         <Title level={1}>{title}</Title>
         {extra && <div className="page-intro-extra">{extra}</div>}
       </div>
-      <div className="intro-icon" aria-hidden="true"><TeamOutlined /></div>
+      {icon && <div className="intro-icon" aria-hidden="true"><TeamOutlined /></div>}
     </div>
   );
 }

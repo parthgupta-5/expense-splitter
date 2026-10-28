@@ -5,7 +5,7 @@ import { DESCRIPTION_MAX, NOTE_MAX } from '../lib/limits';
 import { parseMoneyInput } from '../lib/money';
 import MoneyInput, { moneyRules } from './MoneyInput';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 const CATEGORIES = ['Food & drink', 'Travel', 'Stay', 'Groceries', 'Transport', 'Entertainment', 'Other'];
 const DEFAULT_SPLIT = 'equal';
 const SPLIT_TYPES = [
@@ -40,7 +40,7 @@ function SplitEditor({ splitType, participants, values, currencySymbol, onChange
             ? parseMoneyInput(values[person], { allowZero: true }).error
             : null;
           return (
-            <Col xs={12} sm={8} md={6} key={person}>
+            <Col xs={12} sm={8} key={person}>
               <Form.Item label={person} htmlFor={id} validateStatus={problem ? 'error' : undefined} help={problem}>
                 {splitType === 'unequal' ? (
                   <MoneyInput
@@ -70,7 +70,13 @@ function SplitEditor({ splitType, participants, values, currencySymbol, onChange
   );
 }
 
-export default function ExpenseForm({ expenseForm, people, currencySymbol }) {
+/**
+ * The add/edit expense form (the group page shows it in a dialog titled "Add an expense" or "Edit expense").
+ * `onCancelEdit` closes an edit; without it, Cancel editing just clears the form.
+ */
+export default function ExpenseForm({
+  expenseForm, people, currencySymbol, onCancelEdit,
+}) {
   const {
     form, splitType, splitValues, participants, editingId, saving,
     reset, submit, changeSplitType, setSplitValue, changeParticipants,
@@ -80,16 +86,9 @@ export default function ExpenseForm({ expenseForm, people, currencySymbol }) {
 
   return (
     <>
-      <div className="section-heading">
-        <div>
-          <Text className="eyebrow">GROUP WORKSPACE</Text>
-          <Title level={3}>{editing ? 'Edit expense' : 'Add an expense'}</Title>
-        </div>
-        <div className="step-pill">01 <span>·</span> ACTIVITY</div>
-      </div>
-      <Form form={form} layout="vertical" onFinish={submit} className="expense-form">
+      <Form form={form} name="expense" layout="vertical" onFinish={submit} className="expense-form">
         <Row gutter={16}>
-          <Col xs={24} md={7}>
+          <Col xs={24}>
             <Form.Item
               name="description"
               label="What was it for?"
@@ -98,22 +97,22 @@ export default function ExpenseForm({ expenseForm, people, currencySymbol }) {
               <Input size="large" placeholder="Dinner, groceries, taxi…" maxLength={DESCRIPTION_MAX} showCount />
             </Form.Item>
           </Col>
-          <Col xs={12} sm={8} md={5}>
+          <Col xs={24} sm={12}>
             <Form.Item name="payer" label="Who paid?" rules={[{ required: true, message: 'Choose who paid' }]}>
               <Select size="large" placeholder="Select a person" options={options} />
             </Form.Item>
           </Col>
-          <Col xs={12} sm={8} md={4}>
+          <Col xs={24} sm={12}>
             <Form.Item name="amount" label="Total amount" rules={moneyRules('Enter the total')}>
               <MoneyInput size="large" prefix={currencySymbol} placeholder="0.00" />
             </Form.Item>
           </Col>
-          <Col xs={12} sm={8} md={4}>
+          <Col xs={24} sm={12}>
             <Form.Item name="category" label="Category" initialValue="Other">
               <Select size="large" options={CATEGORIES.map((value) => ({ label: value, value }))} />
             </Form.Item>
           </Col>
-          <Col xs={12} sm={8} md={4}>
+          <Col xs={24} sm={12}>
             <Form.Item label="Split method" htmlFor="split-method" required>
               <Select
                 id="split-method"
@@ -156,9 +155,9 @@ export default function ExpenseForm({ expenseForm, people, currencySymbol }) {
           />
         )}
         <div className="form-actions">
-          <Button onClick={reset}>{editing ? 'Cancel editing' : 'Clear'}</Button>
+          <Button onClick={editing ? (onCancelEdit || reset) : reset}>{editing ? 'Cancel editing' : 'Clear'}</Button>
           <Button type="primary" htmlType="submit" loading={saving} icon={editing ? <CheckOutlined /> : <PlusOutlined />}>
-            {editing ? 'Save changes' : 'Add expense'}
+            {editing ? 'Save changes' : 'Save expense'}
           </Button>
         </div>
       </Form>

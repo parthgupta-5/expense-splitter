@@ -12,6 +12,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import App from './App';
 import { AppProvider } from './state/AppContext';
+import { findHeading, preloadLazyModules } from './test/app';
 import * as repo from './data/cloudRepo';
 import { reencodeAvatar } from './lib/avatarImage';
 
@@ -68,13 +69,14 @@ const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a
 const pngFile = (name = 'me.png') => new File([PNG_BYTES], name, { type: 'image/png' });
 const REENCODED = new Blob(['jpeg pixels'], { type: 'image/jpeg' });
 
-beforeAll(() => {
+beforeAll(async () => {
   window.matchMedia = window.matchMedia || ((query) => ({
     matches: false, media: query, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},
     dispatchEvent() { return false; },
   }));
   window.ResizeObserver = window.ResizeObserver || class { observe() {} unobserve() {} disconnect() {} };
   window.scrollTo = () => {};
+  await preloadLazyModules();
 });
 beforeEach(() => {
   const store = new Map();
@@ -97,8 +99,7 @@ afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 const renderSettings = async () => {
   render(<MemoryRouter initialEntries={['/settings']}><AppProvider><App /></AppProvider></MemoryRouter>);
-  await screen.findByRole('heading', { level: 2, name: 'Asha Rao' });
-  return within(document.querySelector('.account-card'));
+  return within((await findHeading('Asha Rao', 3)).closest('.account-card'));
 };
 const photos = () => Array.from(document.querySelectorAll('.user-avatar img')).map((img) => img.getAttribute('src'));
 const fileInput = () => screen.getByLabelText('Profile photo file');

@@ -14,6 +14,19 @@ test.afterEach(async ({ page }) => {
   expect(page.errors, 'no errors in the browser console').toEqual([]);
 });
 
+// The expense form opens in a dialog from the page's main action, Add expense.
+async function openExpenseForm(page) {
+  await page.locator('.group-toolbar').getByRole('button', { name: 'Add expense' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Add an expense' });
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+const noSidewaysScroll = async (page) => {
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+};
+
 // "Add people" → "Add guest" (the only choice that works without an account), then close the dialog.
 async function addGuests(page, names) {
   await page.getByRole('button', { name: /add people/i }).click();
@@ -33,23 +46,38 @@ test('a guest can split a bill, settle up and keep the data after a reload', asy
   await addGuests(page, 'Asha, Ben, Chitra');
   await expect(page.locator('.people-rows')).toContainText('Chitra');
 
-  await page.getByLabel(/what was it for/i).fill('Dinner');
-  await page.getByLabel(/who paid/i).click();
+  const form = await openExpenseForm(page);
+  await expect(form.getByLabel(/what was it for/i)).toBeFocused();
+  await form.getByLabel(/what was it for/i).fill('Dinner');
+  await form.getByLabel(/who paid/i).click();
   await page.getByTitle('Asha', { exact: true }).last().click();
-  await page.getByLabel(/total amount/i).fill('900');
-  await page.getByRole('button', { name: /add expense/i }).click();
-  await expect(page.getByRole('cell', { name: /Dinner/ })).toBeVisible();
+  await form.getByLabel(/total amount/i).fill('900');
+  await form.getByRole('button', { name: /save expense/i }).click();
+  await expect(form).toBeHidden();
+  const row = page.locator('.expense-row', { hasText: 'Dinner' });
+  await expect(row).toBeVisible();
+  await expect(row).toContainText('Paid by Asha · Split equally');
+  await expect(row.locator('.money-row-amount')).toHaveText('₹900.00');
+
+  // The summary says what is left to settle in words.
+  const summary = page.locator('.group-summary');
+  await expect(summary).toContainText('₹900.00');
+  await expect(summary).toContainText('2 payments to settle');
+  await expect(summary).toContainText('Ben and Chitra owe money');
+  await noSidewaysScroll(page);
 
   await page.getByRole('tab', { name: /balances/i }).click();
   const settle = page.locator('.settlement-box');
   await expect(settle).toContainText('Ben');
   await expect(settle).toContainText('Chitra');
   await expect(settle.getByText('₹300.00')).toHaveCount(2);
+  await expect(page.locator('.balances-table')).toContainText('Owes ₹300.00');
+  await noSidewaysScroll(page);
 
   const url = page.url();
   await page.reload();
   await expect(page).toHaveURL(url);
-  await expect(page.getByRole('cell', { name: /Dinner/ })).toBeVisible();
+  await expect(page.locator('.expense-row', { hasText: 'Dinner' })).toBeVisible();
 });
 
 test('groups have their own currency and every page has a working URL', async ({ page }) => {
@@ -62,7 +90,7 @@ test('groups have their own currency and every page has a working URL', async ({
   await page.getByTitle('US Dollar (USD)').click();
   await dialog.getByRole('button', { name: 'Create group' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'New York trip' })).toBeVisible();
-  await expect(page.locator('.page-intro-extra')).toContainText('USD');
+  await expect(page.locator('.group-subtitle')).toContainText('USD');
 
   for (const [path, heading] of [['/history', 'Activity history'], ['/people', 'Saved people'], ['/settings', 'Settings'], ['/profile', 'Your account']]) {
     await page.goto(path);
@@ -75,33 +103,35 @@ test('groups have their own currency and every page has a working URL', async ({
 test('money fields take at most two decimals, use a decimal keypad and have no stepper', async ({ page }) => {
   await page.goto('/');
   await addGuests(page, 'Asha, Ben');
+  const form = await openExpenseForm(page);
 
-  const method = page.locator('.ant-form-item').filter({ has: page.locator('#split-method') });
+  const method = form.locator('.ant-form-item').filter({ has: page.locator('#split-method') });
   await expect(method).toContainText('Equal');
   await expect(method).toContainText('default');
   await expect(method.locator('label')).toHaveClass(/ant-form-item-required/);
 
-  const amount = page.getByLabel(/total amount/i);
+  const amount = form.getByLabel(/total amount/i);
   await expect(amount).toHaveAttribute('inputmode', 'decimal');
-  await expect(page.getByLabel('Payment amount')).toHaveAttribute('inputmode', 'decimal');
   await expect(page.getByRole('spinbutton')).toHaveCount(0);
   await amount.fill('10.5');
   await amount.press('ArrowUp');
   await expect(amount).toHaveValue('10.5');
 
-  await page.getByLabel(/what was it for/i).fill('Taxi');
-  await page.getByLabel(/who paid/i).click();
+  await form.getByLabel(/what was it for/i).fill('Taxi');
+  await form.getByLabel(/who paid/i).click();
   await page.getByTitle('Asha', { exact: true }).last().click();
   await amount.fill('10.555');
-  await expect(page.getByText('Use at most 2 decimal places')).toBeVisible();
-  await page.getByRole('button', { name: /add expense/i }).click();
-  await expect(page.getByRole('cell', { name: /Taxi/ })).toHaveCount(0);
+  await expect(form.getByText('Use at most 2 decimal places')).toBeVisible();
+  await form.getByRole('button', { name: /save expense/i }).click();
+  await expect(form).toBeVisible(); // refused: still open, nothing saved
+  await expect(page.locator('.expense-row', { hasText: 'Taxi' })).toHaveCount(0);
 
   await amount.fill('10.55');
-  await page.getByRole('button', { name: /add expense/i }).click();
-  await expect(page.getByRole('cell', { name: /Taxi/ })).toBeVisible();
+  await form.getByRole('button', { name: /save expense/i }).click();
+  await expect(page.locator('.expense-row', { hasText: 'Taxi' })).toBeVisible();
   await page.getByRole('tab', { name: /balances/i }).click();
   await expect(page.locator('.settlement-box')).toContainText('₹5.27');
+  await expect(page.getByLabel('Payment amount')).toHaveAttribute('inputmode', 'decimal');
 
   // CSV amounts stay plain numbers, as before the switch to cents, so spreadsheets can add them up.
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export CSV' }).click()]);
@@ -128,18 +158,19 @@ test('guest data saved by the previous version opens with the same amounts and i
   });
   await page.goto('/groups/legacy-trip');
   await expect(page.getByRole('heading', { level: 1, name: 'Old trip' })).toBeVisible();
-  await expect(page.locator('.activity-card')).toContainText('₹100.50');
+  await expect(page.locator('.group-tabs')).toContainText('₹100.50');
   await page.getByRole('tab', { name: /balances/i }).click();
   await expect(page.locator('.settlement-box')).toContainText('₹23.25');
 
   await page.getByRole('tab', { name: /expenses/i }).click();
-  await page.getByRole('button', { name: 'Edit expense' }).click();
+  await page.getByRole('button', { name: 'Edit Hotel' }).click();
+  await expect(page.getByRole('dialog', { name: 'Edit expense' })).toBeVisible();
   await expect(page.getByText('Set shares for each person')).toBeVisible();
   await expect(page.getByLabel(/total amount/i)).toHaveValue('100.50');
   await expect(page.locator('.split-editor').getByLabel('Asha')).toHaveValue(/^2(\.0+)?$/);
 
   await page.reload();
-  await expect(page.locator('.activity-card')).toContainText('₹100.50');
+  await expect(page.locator('.group-tabs')).toContainText('₹100.50');
   expect(await page.evaluate(() => localStorage.getItem('expenseSplitterStateV2'))).not.toBeNull();
 });
 

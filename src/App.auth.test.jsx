@@ -12,6 +12,7 @@ import userEvent from '@testing-library/user-event';
 import { BrowserRouter, MemoryRouter } from 'react-router';
 import App from './App';
 import { AppProvider } from './state/AppContext';
+import { findButton, findHeading, preloadLazyModules } from './test/app';
 import * as repo from './data/cloudRepo';
 
 const mocks = vi.hoisted(() => ({ auth: {} }));
@@ -38,13 +39,14 @@ vi.mock('./data/cloudRepo', () => ({
 const STRONG = 'Correct-Horse-9';
 const pending = () => new Promise(() => {});
 
-beforeAll(() => {
+beforeAll(async () => {
   window.matchMedia = window.matchMedia || ((query) => ({
     matches: false, media: query, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {},
     dispatchEvent() { return false; },
   }));
   window.ResizeObserver = window.ResizeObserver || class { observe() {} unobserve() {} disconnect() {} };
   window.scrollTo = () => {};
+  await preloadLazyModules();
 });
 beforeEach(() => {
   const store = new Map();
@@ -100,7 +102,7 @@ const openUrl = (url) => {
 
 async function openSignUp(user) {
   renderAt('/profile');
-  await user.click(await screen.findByRole('button', { name: /Sign in or create account/ }));
+  await user.click(await findButton('Sign in or create account'));
   return findDialog('Create your account');
 }
 
@@ -214,7 +216,7 @@ describe('sign in', () => {
     const user = userEvent.setup();
     mocks.auth.signInWithGoogle.mockReturnValue(pending()); // the browser would now leave for Google
     renderAt('/settings');
-    await user.click(await screen.findByRole('button', { name: 'Sign in or create account' }));
+    await user.click(await findButton('Sign in or create account'));
     const dialog = await findDialog('Create your account');
     const google = within(dialog).getByRole('button', { name: /Continue with Google/ });
     await user.click(google);
@@ -316,7 +318,7 @@ describe('new password after a reset', () => {
     const user = userEvent.setup();
     signedInRecovering();
     renderAt('/reset-password');
-    expect(await screen.findByRole('heading', { level: 1, name: 'Choose a new password' })).toBeTruthy();
+    expect(await findHeading('Choose a new password', 1)).toBeTruthy();
     const password = screen.getByLabelText(/^new password/i);
     await user.type(password, 'Short1!');
     await user.type(screen.getByLabelText(/repeat new password/i), 'Short1!');
@@ -349,6 +351,6 @@ describe('Google accounts', () => {
     await findDialog('Choose your username');
     expect(repo.saveProfile).toHaveBeenCalledWith('user-2', { display_name: 'Gita Rao' });
     expect(repo.saveProfile.mock.invocationCallOrder[0]).toBeLessThan(repo.suggestUsername.mock.invocationCallOrder[0]);
-    expect(screen.getByRole('heading', { level: 2, name: 'Gita Rao' })).toBeTruthy();
+    expect(await findHeading('Gita Rao', 3)).toBeTruthy(); // the account's name in Settings
   });
 });

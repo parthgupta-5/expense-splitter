@@ -55,11 +55,11 @@ test('"Add people" offers exactly two choices, works with the keyboard and fits 
   await expect(page.locator('.people-rows .person-row')).toHaveCount(1);
   await expect(page.getByText(/No expenses yet\. Record the first one/)).toBeVisible();
   await page.getByRole('button', { name: 'Add an expense' }).click();
-  await expect(page.getByLabel(/what was it for/i)).toBeFocused();
+  await expect(page.getByRole('dialog', { name: 'Add an expense' }).getByLabel(/what was it for/i)).toBeFocused();
   await noSidewaysScroll(page);
 });
 
-test('the policies are public, linked from every page and from Settings, and readable on a phone', async ({ page }) => {
+test('the policies are public, linked from every page footer, and readable on a phone', async ({ page }) => {
   await page.goto('/groups');
   const footer = page.getByRole('navigation', { name: 'Policies' });
   await footer.getByRole('link', { name: 'Privacy Policy' }).click();
@@ -69,8 +69,10 @@ test('the policies are public, linked from every page and from Settings, and rea
   await expect(page.locator('#deletion')).toContainText('Former member');
   await noSidewaysScroll(page);
 
+  // Settings has no policies section of its own: the footer, on every page, links to them.
   await page.goto('/settings');
-  await page.locator('.setting-card', { hasText: 'Privacy and terms' }).getByRole('link', { name: 'Terms of Service' }).click();
+  await expect(page.getByText('Privacy and terms')).toHaveCount(0);
+  await page.getByRole('navigation', { name: 'Policies' }).getByRole('link', { name: 'Terms of Service' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Terms of Service' })).toBeVisible();
   await expect(page.locator('#service')).toContainText('does not move money');
   await noSidewaysScroll(page);

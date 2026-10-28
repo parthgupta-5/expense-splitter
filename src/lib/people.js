@@ -31,6 +31,22 @@ function hasActivity(name, expenses, payments) {
 }
 
 /**
+ * The names an expense uses (who paid, who has a share, who took part) that are no longer people in the group, in that
+ * order, each once. A settled person can be removed while their old expenses still name them; editing such an expense
+ * would drop them from the split and move their share onto everyone else, so the app refuses instead.
+ */
+export function removedPeopleIn(expense, people) {
+  const current = new Set(people);
+  const named = [expense.payer, ...Object.keys(expense.splitCents || {}), ...(expense.participants || [])];
+  return [...new Set(named.filter((name) => name && !current.has(name)))];
+}
+
+/** "Asha", "Asha and Ben", "Asha, Ben and Chitra". */
+export const listNames = (names) => (names.length < 2
+  ? names.join('')
+  : names.slice(0, -1).join(', ') + ' and ' + names.at(-1));
+
+/**
  * 'blocked' (still owes / is owed), 'confirm' (has history but settled), or 'free'.
  * Settled means exactly zero cents, the same rule as the database's guard_person_removal().
  */
