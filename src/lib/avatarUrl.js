@@ -37,3 +37,15 @@ export function ownAvatarPath(url, userId, supabaseUrl) {
 
 /** The photo to show for this profile, or null to show the generated initial. */
 export const managedAvatarSrc = (url, userId, supabaseUrl) => (ownAvatarPath(url, userId, supabaseUrl) ? url : null);
+
+/** Another account's photo (from find_invitee() or list_group_people()), shown only if it is a managed photo here. */
+export function memberAvatarSrc(url, supabaseUrl) {
+  if (typeof url !== 'string' || !url.includes(PUBLIC_PREFIX)) return null;
+  let folder;
+  try {
+    folder = new URL(url).pathname.slice(PUBLIC_PREFIX.length).split('/')[0];
+  } catch {
+    return null;
+  }
+  return managedAvatarSrc(url, folder, supabaseUrl);
+}

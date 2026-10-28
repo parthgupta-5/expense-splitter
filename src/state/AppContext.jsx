@@ -5,11 +5,12 @@ import { App as AntApp, ConfigProvider } from 'antd';
 import { readTheme, saveTheme } from '../lib/storage';
 import { buildTheme, requiredMark } from '../theme';
 import { useAuth } from './useAuth';
+import { useInvitations } from './useInvitations';
 import { useWorkspace } from './useWorkspace';
 
 const AppContext = createContext(null);
 
-/** Everything pages need: auth, workspace data and actions, notifications and app-level UI state. */
+/** Everything pages need: auth, workspace data and actions, invitations, notifications and app-level UI state. */
 export function useApp() {
   const value = useContext(AppContext);
   if (!value) throw new Error('useApp must be used inside <AppProvider>');
@@ -20,6 +21,12 @@ function AppState({ children, dark, setDark }) {
   const { message, modal } = AntApp.useApp();
   const auth = useAuth();
   const workspace = useWorkspace({ user: auth.user, authReady: auth.ready, notify: message });
+  const invitations = useInvitations({
+    userId: auth.user?.id,
+    enabled: workspace.mode === 'cloud' && workspace.status === 'ready',
+    realtime: workspace.realtime,
+    onChange: workspace.actions.onInvitationsChange,
+  });
   const [authDialog, setAuthDialog] = useState({ open: false, mode: 'signup' });
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
 
@@ -30,6 +37,7 @@ function AppState({ children, dark, setDark }) {
   const value = useMemo(() => ({
     auth,
     workspace,
+    invitations,
     notify: message,
     modal,
     dark,
@@ -41,7 +49,7 @@ function AppState({ children, dark, setDark }) {
     groupDialogOpen,
     openGroupDialog: () => setGroupDialogOpen(true),
     closeGroupDialog: () => setGroupDialogOpen(false),
-  }), [auth, workspace, message, modal, dark, toggleDark, authDialog, openAuth, closeAuth, groupDialogOpen]);
+  }), [auth, workspace, invitations, message, modal, dark, toggleDark, authDialog, openAuth, closeAuth, groupDialogOpen]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

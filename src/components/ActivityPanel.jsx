@@ -11,7 +11,7 @@ const countLabel = (label, count) => <span>{label} <Tag bordered={false}>{count}
 
 export default function ActivityPanel({
   expenses, payments, balances, settlements, formatMoney,
-  onEditExpense, onDeleteExpense, onDeletePayment, onSaveSplit, onExportCsv, onCopySummary,
+  onEditExpense, onDeleteExpense, onDeletePayment, onAddExpense, onSaveSplit, onExportCsv, onCopySummary,
 }) {
   const empty = !expenses.length && !payments.length;
   return (
@@ -40,6 +40,7 @@ export default function ActivityPanel({
                 formatMoney={formatMoney}
                 onEdit={onEditExpense}
                 onDelete={onDeleteExpense}
+                onAdd={onAddExpense}
               />
             ),
           },

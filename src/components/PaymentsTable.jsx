@@ -29,7 +29,7 @@ export default function PaymentsTable({ payments, formatMoney, onDelete }) {
       columns={columns}
       dataSource={payments}
       pagination={{ pageSize: 5, hideOnSinglePage: true }}
-      locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No payments recorded yet." /> }}
+      locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No payments recorded yet. When someone pays another person back, record it above." /> }}
     />
   );
 }

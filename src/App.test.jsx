@@ -51,8 +51,21 @@ describe('App (guest mode)', () => {
     renderAt('/');
     expect(await screen.findByRole('heading', { level: 1, name: 'My first group' })).toBeTruthy();
 
-    await user.type(screen.getByLabelText('Add participant name'), 'Asha, Ben{Enter}');
-    expect(await screen.findByText('Asha')).toBeTruthy();
+    // Guests (no account): "Add people" offers both choices, adding by username explains it needs an account.
+    await user.click(screen.getByRole('button', { name: /add people/i }));
+    const dialog = (await screen.findByText('Add by username')).closest('[role="dialog"]');
+    expect(Array.from(dialog.querySelectorAll('.ant-segmented-item-label'), (node) => node.textContent))
+      .toEqual(['Add by username', 'Add guest']); // exactly two choices
+    await user.type(within(dialog).getByLabelText('Guest name'), 'Asha, Ben{Enter}');
+    expect(await screen.findByText('2 guests added')).toBeTruthy();
+    await user.click(within(dialog).getAllByText('Add by username')[0]);
+    expect(within(dialog).getByText(/sends them an invitation, so it needs an account/)).toBeTruthy();
+    await user.click(within(dialog).getByRole('button', { name: /close/i }));
+    const list = within(await screen.findByRole('list', { name: 'People in My first group' }));
+    expect(list.getByText('Asha')).toBeTruthy();
+    expect(list.getByText('Ben')).toBeTruthy();
+    // Everyone in a guest group is simply a name: no account statuses.
+    expect(list.queryByText('Guest')).toBeNull();
 
     await user.type(screen.getByLabelText(/what was it for/i), 'Dinner');
     await choose(/who paid/i, 'Asha');

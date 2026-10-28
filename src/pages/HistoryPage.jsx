@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router';
 import {
   Alert, Button, Card, Col, Divider, Empty, Popconfirm, Row, Space, Spin, Tag, Timeline, Typography,
 } from 'antd';
@@ -147,7 +148,14 @@ export default function HistoryPage() {
               ),
             }))}
           />
-        ) : <Empty className="empty-panel" description="No activity yet. Add an expense to see it here." />)}
+        ) : (
+          <Empty
+            className="empty-panel"
+            description="No history yet. Expenses, payments, new people and saved splits from your groups will appear here."
+          >
+            <Link to="/groups"><Button type="primary">Go to your groups</Button></Link>
+          </Empty>
+        ))}
       </section>
       <SnapshotModal snapshot={selected} onClose={() => setSelected(null)} />
     </>

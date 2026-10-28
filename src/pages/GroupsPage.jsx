@@ -7,6 +7,7 @@ import { PlusOutlined, TeamOutlined } from '@ant-design/icons';
 import { useApp } from '../state/AppContext';
 import PageIntro from '../components/PageIntro';
 import InvitationsPanel from '../components/InvitationsPanel';
+import WelcomePanel from '../components/WelcomePanel';
 import { currencySymbol } from '../lib/currency';
 import { centsToDecimal, sumCents } from '../lib/money';
 import { groupPath } from '../lib/groupSlug';
@@ -20,11 +21,14 @@ export default function GroupsPage() {
   const { groups } = workspace;
   const lastGroupId = readLastGroup();
   const open = (group) => navigate(groupPath(group, groups));
+  const cloud = workspace.mode === 'cloud';
+  const welcoming = cloud && groups.length === 0 && !workspace.preferences.welcomeDismissed;
 
   return (
     <>
       <PageIntro title="Your groups" />
-      {workspace.mode === 'cloud' && <InvitationsPanel />}
+      {cloud && <InvitationsPanel />}
+      {cloud && <WelcomePanel />}
       <section className="page-panel">
         <div className="page-toolbar">
           <Button type="primary" icon={<PlusOutlined />} onClick={openGroupDialog}>New group</Button>
@@ -60,8 +64,11 @@ export default function GroupsPage() {
             );
           })}
         </Row>
-        {groups.length === 0 && (
-          <Empty description="No groups yet. Create one for a trip, a flat or a dinner.">
+        {groups.length === 0 && !welcoming && (
+          <Empty
+            className="empty-panel"
+            description="No groups yet. Create one for a trip, a flat or a dinner, then add people and record what each person paid."
+          >
             <Button type="primary" onClick={openGroupDialog}>Create a group</Button>
           </Empty>
         )}

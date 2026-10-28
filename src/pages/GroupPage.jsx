@@ -4,7 +4,7 @@ import {
   Button, Card, Col, Result, Row, Statistic, Tag, Tooltip,
 } from 'antd';
 import {
-  CheckCircleFilled, CloudOutlined, SettingOutlined, ShareAltOutlined, TeamOutlined,
+  CheckCircleFilled, CloudOutlined, SettingOutlined, TeamOutlined,
 } from '@ant-design/icons';
 import { useApp } from '../state/AppContext';
 import { useExpenseForm } from '../hooks/useExpenseForm';
@@ -15,6 +15,7 @@ import MembersModal from '../components/MembersModal';
 import PageIntro from '../components/PageIntro';
 import PaymentForm from '../components/PaymentForm';
 import PeoplePanel from '../components/PeoplePanel';
+import WelcomePanel from '../components/WelcomePanel';
 import { toCsv } from '../lib/csv';
 import { currencySymbol, formatCents } from '../lib/currency';
 import { downloadText } from '../lib/download';
@@ -49,7 +50,6 @@ export default function GroupPage({ groupId }) {
   } = useApp();
   const { actions } = workspace;
   const group = workspace.groups.find((item) => item.id === groupId);
-  const [nameValue, setNameValue] = useState('');
   const [membersOpen, setMembersOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const isScrolled = useScrolled();
@@ -83,36 +83,47 @@ export default function GroupPage({ groupId }) {
     );
   }
 
-  const addPeople = async (raw = nameValue) => {
+  /** Adds guests by name (one, or several separated by commas). Resolves to true when someone was added. */
+  const addGuests = async (raw) => {
     const parsed = parseNames(raw, people);
     const rejected = describeRejected(parsed);
     if (rejected) notify.error('Not added, ' + rejected);
     if (!parsed.valid.length) {
       if (!rejected && raw.trim()) notify.warning('Enter a name to add');
-      return;
+      return false;
     }
-    setNameValue('');
-    if (!await actions.addPeople(groupId, parsed.valid)) return;
+    if (!await actions.addPeople(groupId, parsed.valid)) return false;
     actions.setSavedPeople((current) => [...current, ...parseNames(parsed.valid.join(','), current).valid]);
-    notify.success(parsed.valid.length === 1 ? parsed.valid[0] + ' added' : parsed.valid.length + ' people added');
+    notify.success(parsed.valid.length === 1 ? parsed.valid[0] + ' added as a guest' : parsed.valid.length + ' guests added');
+    return true;
   };
 
-  const removePerson = (name) => {
+  /** `self`: the owner taking their own person out of the expenses (they stay the owner, with access). */
+  const removePerson = (name, { self = false } = {}) => {
     const status = removalStatus(name, balances, expenses, payments);
     if (status === 'blocked') {
-      notify.warning(name + ' still owes or is owed money in this group. Settle up (record a payment) before removing them.');
+      notify.warning(self
+        ? 'You still owe or are owed money in this group. Settle up (record a payment) before removing yourself.'
+        : name + ' still owes or is owed money in this group. Settle up (record a payment) before removing them.');
       return;
     }
     const remove = async () => {
-      if (await actions.removePerson(groupId, name)) notify.info(name + ' removed from this group');
+      if (await actions.removePerson(groupId, name)) notify.info(self ? 'You are no longer in this group\'s expenses' : name + ' removed from this group');
     };
-    if (status === 'free') { remove(); return; }
+    if (status === 'free' && !self) { remove(); return; }
     modal.confirm({
-      title: 'Remove ' + name + '?',
-      content: 'They are settled up. Their past expenses and payments stay in the group history.',
+      title: self ? 'Remove yourself from the expenses?' : 'Remove ' + name + '?',
+      content: self
+        ? 'You stay the owner and keep access. Your past expenses and payments stay in the group history, and you can add yourself again later.'
+        : 'They are settled up. Their past expenses and payments stay in the group history.',
       okText: 'Remove',
       onOk: remove,
     });
+  };
+
+  const goToExpenseForm = () => {
+    document.getElementById('add-expense')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    document.querySelector('#add-expense input')?.focus({ preventScroll: true });
   };
 
   const saveSplit = async () => {
@@ -168,8 +179,8 @@ export default function GroupPage({ groupId }) {
           <>
             {shared && <Tag icon={<TeamOutlined />} color="purple">Shared · {group.memberCount} members</Tag>}
             <Tag>{group.currencyCode}</Tag>
-            <Tooltip title={group.cloud ? 'Invite friends to edit this group' : 'Sign in to share this group'}>
-              <Button size="small" icon={<ShareAltOutlined />} onClick={() => setMembersOpen(true)}>Share</Button>
+            <Tooltip title={group.cloud ? 'Who can open and edit this group' : 'Sign in to share this group'}>
+              <Button size="small" icon={<TeamOutlined />} onClick={() => setMembersOpen(true)}>Members</Button>
             </Tooltip>
             <Button size="small" icon={<SettingOutlined />} onClick={() => setSettingsOpen(true)}>Group settings</Button>
           </>
@@ -186,14 +197,8 @@ export default function GroupPage({ groupId }) {
           <Col xs={8}><Card className="stat-card"><Statistic title="To settle" value={settlements.length} /></Card></Col>
         </Row>
       )}
-      <PeoplePanel
-        groupName={group.name}
-        people={people}
-        value={nameValue}
-        onChange={setNameValue}
-        onAdd={addPeople}
-        onRemove={removePerson}
-      />
+      {!group.cloud && <WelcomePanel guest />}
+      <PeoplePanel group={group} onAddGuests={addGuests} onRemove={removePerson} />
       {people.length > 0 && (
         <div className="feature-content">
           <section className="section-card" id="add-expense">
@@ -220,6 +225,7 @@ export default function GroupPage({ groupId }) {
             onDeletePayment={async (id) => {
               if (await actions.deletePayment(groupId, id)) notify.success('Payment removed');
             }}
+            onAddExpense={goToExpenseForm}
             onSaveSplit={saveSplit}
             onExportCsv={exportCsv}
             onCopySummary={copySummary}

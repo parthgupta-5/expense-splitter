@@ -4,7 +4,7 @@ import {
 import * as repo from '../data/cloudRepo';
 import { friendlyError } from '../lib/errors';
 import { mergeActivity, newestActivityId } from '../lib/activityFeed';
-import { readActivitySeen, writeActivitySeen } from '../lib/storage';
+import { SEEN_KEYS, readActivitySeen, writeActivitySeen } from '../lib/storage';
 
 export const FEED_SIZE = 30;
 const fresh = (key) => ({
@@ -66,6 +66,18 @@ export function useActivityFeed({
     lastRealtime.current = realtime;
     if (realtime === 'live' && previous === 'offline') reload();
   }, [realtime, reload]);
+
+  // The panel was opened in another tab of this browser: follow it, so the count is the same in every tab.
+  useEffect(() => {
+    if (!key) return undefined;
+    const onStorage = (event) => {
+      if (event.key !== SEEN_KEYS.activity) return;
+      const stored = readActivitySeen(key);
+      if (stored !== null) update(key, (current) => (current.seenId === null || stored > current.seenId ? { seenId: stored } : {}));
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [key, update]);
 
   /** Marks everything in the list as seen, on this device only. */
   const markSeen = useCallback(() => {

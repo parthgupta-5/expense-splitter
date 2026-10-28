@@ -9,6 +9,7 @@ import {
 } from 'antd';
 import { useApp } from './state/AppContext';
 import TopBar from './components/TopBar';
+import AppFooter from './components/AppFooter';
 import { readLastGroup } from './lib/storage';
 import { needsUsername } from './lib/username';
 import { CALLBACK_PATH } from './lib/authRedirect';
@@ -27,6 +28,10 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const AuthCallbackPage = lazy(() => import('./pages/AuthCallbackPage'));
+const PrivacyPage = lazy(() => import('./pages/PrivacyPage'));
+const TermsPage = lazy(() => import('./pages/TermsPage'));
+// Public pages that never wait for account data (they need none) and are never covered by the username dialog.
+const LEGAL_PAGES = { '/privacy': PrivacyPage, '/terms': TermsPage };
 
 const { Content } = Layout;
 const loading = <Spin size="large" style={{ display: 'block', margin: '80px auto' }} />;
@@ -84,8 +89,9 @@ export default function App() {
   const { pathname } = useLocation();
   // An account still on its provisional user_ name must choose a username before anything else (except finishing a
   // sign-in or a password reset).
+  const LegalPage = LEGAL_PAGES[pathname];
   const chooseUsername = workspace.mode === 'cloud' && workspace.status === 'ready' && !auth.recovering
-    && pathname !== CALLBACK_PATH && needsUsername(workspace.profile);
+    && pathname !== CALLBACK_PATH && !LegalPage && needsUsername(workspace.profile);
 
   // The password-reset email link signs the user in; send them to the page where they choose a new password.
   useEffect(() => {
@@ -98,6 +104,8 @@ export default function App() {
   if (pathname === CALLBACK_PATH) {
     // Stays mounted while the new session's data loads, so the sign-in can finish and move on.
     body = <Suspense fallback={loading}><AuthCallbackPage /></Suspense>;
+  } else if (LegalPage) {
+    body = <Suspense fallback={loading}><LegalPage /></Suspense>;
   } else if (!auth.ready || workspace.status === 'loading') {
     body = loading;
   } else if (workspace.status === 'error') {
@@ -133,6 +141,7 @@ export default function App() {
       <a className="skip-link" href="#main">Skip to content</a>
       <TopBar />
       <Content className="content" id="main" tabIndex={-1}>{body}</Content>
+      <AppFooter />
       <Suspense fallback={null}>
         {authDialog.open && <AuthModal />}
         {groupDialogOpen && <GroupModal />}
