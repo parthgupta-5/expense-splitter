@@ -23,7 +23,7 @@ without signing up, and sign in when they want their groups on every device or s
 
 ## Solution
 
-A **local-first** web app with an optional account:
+A web app that is useful **without an account**, with an optional account for sync and sharing:
 
 - **Guest mode (no sign-up):** everything works immediately and is saved in this browser.
 - **Signed in:** groups live in Postgres (Supabase), sync across devices, and can be **shared**: friends invited by
@@ -47,14 +47,16 @@ A **local-first** web app with an optional account:
 5. **Activity history and bell.** For signed-in users, a server-written log of who did what ("Asha added 'Dinner' ·
    ₹1,200"). The bell in the top bar lists the latest activity across your groups, live; a dot means someone else did
    something since you last opened it on this device. Point-in-time **saved splits** (snapshots) can be viewed later.
-6. **Accounts.** Email sign-up and sign-in, password reset by email, profile name and avatar. Groups made before
-   signing in can be moved into the account in one click.
+6. **Accounts.** Email and password sign-up confirmed with a 6-digit email code, Google sign-in, password reset by
+   emailed code, and a change-password option in Settings. Each account chooses a unique @username at first sign-in and
+   can upload a profile photo (re-encoded in the browser, metadata removed). Groups made before signing in can be
+   moved into the account in one click.
 7. **Backup and export.** JSON backup and restore with validation, and CSV export that is safe to open in spreadsheets.
 8. **Proper URLs.** Every page and every group has its own address, so the back button, refresh and bookmarks work.
 
 ## How using the app without signing up works
 
-This is a deliberate design choice (local-first), not a gap in security:
+This is a deliberate design choice (guest mode), not a gap in security:
 
 1. **Guests' data never leaves the browser.** `src/state/useWorkspace.js` loads guest data from `localStorage`
    (`readGuestState()` in `src/lib/storage.js`) and saves it back after every change (`writeGuestState()`). No account
@@ -75,19 +77,39 @@ This is a deliberate design choice (local-first), not a gap in security:
 | Backend | Supabase: Postgres, Auth, Row Level Security, Realtime, SQL functions | Managed auth; authorisation and validation enforced in the database |
 | Hosting | Vercel (static SPA) | Free tier, redeploys on every push |
 | Tests | Vitest, Testing Library, PGlite (Postgres in WebAssembly), Playwright | Money logic, data layer, security policies and real browser flows |
-| Quality | ESLint (incl. React Hooks rules), GitHub Actions CI, secret scan | Every push is linted, tested and built |
+| Quality | ESLint (incl. React Hooks rules), GitHub Actions CI, secret scan | Every pull request and push to `main` is linted, tested and built |
 
 ## Architecture
+
+In brief:
+
+- **Frontend:** a React single-page app built with Vite and served as static files by Vercel. There is no custom
+  server: the browser talks to Supabase directly with the public anon key and the signed-in user's token.
+- **Supabase:** **Auth** handles sessions (email and password with 6-digit codes, Google, both using PKCE).
+  **Postgres** holds every signed-in group as normalised rows. **Row Level Security** decides who may read or write
+  each row. **Realtime** pushes new activity-log rows to the members of a group. **Storage** holds profile photos.
+- **Guest mode:** with no session, the same app keeps its data in `localStorage` and never calls the database.
+- **Money:** every amount is an integer number of cents (paise) in the app, in backups and in `bigint` database
+  columns; splits use the largest-remainder method, so parts always add up exactly. Decimals are only for display.
+- **Authorisation and ownership:** Postgres is the authority, not the UI. Group access comes from `group_members`;
+  the owner (`created_by`, locked after insert) alone renames the group, changes its currency, deletes it and
+  manages invitations. Invitations, membership changes and the activity log go only through security-definer
+  functions and triggers, which re-check the caller. Hiding a button is only a convenience.
+- **Testing:** pure logic and React screens run in Vitest (jsdom, mocked Supabase). The real SQL migrations, policies
+  and rollbacks run in PGlite (Postgres compiled to WebAssembly), acting as different users. The production build is
+  driven in real Chromium by Playwright. CI runs all of it on every pull request and every push to `main`.
 
 ```text
 Browser (React SPA on Vercel)
  ├─ src/main.jsx                 BrowserRouter + AppProvider (context) + error boundary
- ├─ src/App.jsx                  layout and routes: /groups/:groupId, /groups, /history, /people, /settings, /profile
+ ├─ src/App.jsx                  layout and routes: /groups/:groupId, /groups, /history, /people, /settings, /profile,
+ │                               /auth/callback (email links and Google), /reset-password
  ├─ src/pages/                   one component per route (lazy-loaded)
  ├─ src/components/              forms, tables, dialogs (members, group settings, auth, import)
  ├─ src/state/
  │    AppContext.jsx             provides auth + workspace + notifications to every page (no prop drilling)
- │    useAuth.js                 Supabase session, sign-up/in/out, password reset
+ │    useAuth.js                 Supabase session, email codes, Google sign-in, password reset and change
+ │    useActivityFeed.js         the bell's list and its per-device unread marker
  │    useWorkspace.js            guest (localStorage) or signed-in (Supabase) data, optimistic updates, realtime
  │    workspaceReducer.js        pure state transitions (unit-tested)
  ├─ src/data/
@@ -96,13 +118,15 @@ Browser (React SPA on Vercel)
  └─ src/lib/                     pure, unit-tested logic: splits, people, backup, csv, storage, currency, activity
           │  HTTPS (anon key + user JWT)          ▲ Realtime (websocket, RLS-filtered)
           ▼                                       │
-Supabase Postgres
+Supabase (Auth, Postgres, Realtime, Storage)
  ├─ tables: profiles, groups, group_members, group_people, group_invitations, expenses, payments, saved_splits,
- │          activity_log
+ │          activity_log, plus internal username and rate-limit tables that no client can read or write
  ├─ Row Level Security on every table (members only)
  ├─ triggers: validate expenses/payments, block removing people with open balances, write the activity log
- └─ functions: invite_by_username, accept/decline/revoke_invitation, list_my_invitations, list_group_invitations,
-               list_group_members, remove_member, import_group, group_balances
+ ├─ functions: set_username, check_username, invite_by_username, accept/decline/revoke_invitation,
+ │             list_my_invitations, list_group_invitations, list_group_members, remove_member, import_group,
+ │             group_balances
+ └─ Storage: public `avatars` bucket; each user can write and list only their own folder
 ```
 
 ### Database design
@@ -111,14 +135,15 @@ Supabase Postgres
 |---|---|
 | `groups` | Name, currency, owner (`created_by`, locked after insert) |
 | `group_members` | Which **accounts** can access a group (`owner` or `member`) |
-| `group_people` | The **names** in the split (friends do not need an account); unique per group, case-insensitive |
+| `group_people` | The **names** in the split (friends do not need an account); unique per group, case-insensitive. `user_id` links a person to an account, set only by accepting an invitation |
+| `group_invitations` | Pending and answered invitations (group, person, invitee account, status, expiry); reachable only through functions |
 | `expenses` | Amount in `bigint` cents, payer, split type, per-person shares (`{name: cents}`) |
 | `payments` | Repayments between two different people, in cents |
 | `saved_splits` | Read-only snapshots, stored as JSON documents |
 | `activity_log` | Who did what, written only by triggers |
 | `profiles` | Each account's name, preferences and unique `@username`; readable and writable only by its owner. The username changes only through `set_username()`; `avatar_url` may only point at the owner's own photo |
 
-### Security model (enforced by Postgres, tested in `supabase/tests/database.test.js`)
+### Security model (enforced by Postgres, tested in `supabase/tests/`)
 
 | Action | Who is allowed |
 |---|---|
@@ -130,7 +155,25 @@ Supabase Postgres
 | Link an account to a person | Nobody directly: only by accepting an invitation for that person |
 | Leave a group | Any member except the owner |
 | Write the activity log, add members directly | Nobody (triggers and security-definer functions only) |
+| Read or change a profile (name, username, preferences) | Only its owner; the username changes only through `set_username()` |
+| Upload, replace or delete a profile photo | Only its owner, in their own `avatars/<user id>/` folder |
 | Anything at all | Not anonymous visitors |
+
+### Security notes
+
+- **No secrets in the repository or the browser.** The app uses only the public anon key; the `service_role` key is
+  never used. `scripts/check-secrets.mjs` runs in CI and fails on tokens, secret keys, private keys or tracked
+  `.env` files. The Google client secret and SMTP credentials live only in the Supabase dashboard.
+- **Sign-in:** PKCE flow with one `/auth/callback` route; codes and tokens are removed from the address bar at once.
+  Passwords need 12+ characters with mixed character types (set in Supabase Auth).
+- **Privacy:** members see each other's display names and @usernames, never email addresses.
+- **Abuse limits** (database-side): 60 username checks per 10 minutes, 10 username changes per hour and 30
+  invitations per hour per account, at most 20 pending invitations per group.
+- **Photos:** checked by their bytes, re-encoded to a 512 x 512 JPEG in the browser (removing EXIF and GPS), stored
+  under a random name; the bucket accepts only JPEG up to 1 MB.
+- **Browser hardening:** `vercel.json` sends a Content-Security-Policy (only this site, Google Fonts and
+  `*.supabase.co`), `X-Frame-Options: DENY`, `nosniff`, a strict referrer policy and a restrictive permissions policy.
+- Every schema change ships with a migration and, since usernames, a tested rollback script in `supabase/rollbacks/`.
 
 ### Key decisions
 
@@ -160,8 +203,12 @@ npm install
 cp .env.example .env      # optional: without it the app runs in guest mode only
 npm run dev               # http://localhost:5173
 npm test                  # unit, component, app and database tests
+npm run test:unit         # only the tests in src/ (as in CI)
+npm run test:db           # only the database tests (real migrations in PGlite; no Supabase project needed)
 npm run test:e2e          # browser tests (first time: npx playwright install chromium)
 npm run lint
+npm run build             # production build in dist/
+npm run check:secrets     # fails if a tracked file looks like it contains a secret
 npm run preflight         # lint + tests + build + secret scan + placeholder check (run before pushing)
 ```
 
@@ -208,7 +255,7 @@ sign-in. The app already deployed keeps working against it. If it must be undone
 **Adding profile photos:** run migration 6 before deploying the app version that uses it. It creates the public
 `avatars` Storage bucket (JPEG only, 1 MB per file) and its policies: each photo is stored at
 `<user id>/<random uuid>.jpg`, only that signed-in user can create, change or delete objects in their own folder, and
-nobody can list the bucket. Photos are checked by their bytes (JPG, PNG or WebP, at most 5 MB) and re-encoded in the
+nobody can list anyone else's photos. Photos are checked by their bytes (JPG, PNG or WebP, at most 5 MB) and re-encoded in the
 browser to a 512 x 512 JPEG, which removes EXIF and GPS metadata. Undo with
 `supabase/rollbacks/2026103001_avatar_storage.down.sql`, which stops serving photos without deleting any.
 
@@ -260,11 +307,11 @@ tables inside one transaction, then drops the old column. Migration 4 makes grou
 
 | Suite | What it proves | Command |
 |---|---|---|
-| Unit (Vitest) | Split, balance and settlement maths (exact cents, random property tests), name rules, CSV escaping, backup and storage sanitising, cents mapping, reducer transitions, activity text | `npm run test:unit` |
+| Unit (Vitest) | Split, balance and settlement maths (exact cents, random property tests), money input parsing, name and username rules, CSV escaping, backup and storage sanitising, cents mapping, reducer transitions, photo checks, sign-in redirects, activity text | `npm run test:unit` |
 | Hook (Vitest + mocked API) | Optimistic updates, rollback with an error message when the server rejects a write, live refresh, guest-to-account import, account data never written to the device | `npm run test:unit` |
-| App (Vitest + jsdom) | Routing, adding people and an expense, settlement shown, 404 pages, the activity bell (unread dot, live updates without duplicates, access filtering, keyboard) | `npm run test:unit` |
-| Database (PGlite) | The real migrations: RLS isolation between users, anonymous access denied, validation triggers, sharing rules, activity log, v1 data upgrade, SQL balances equal JS balances | `npm run test:db` |
-| Browser (Playwright) | Full guest flow in Chromium on desktop and a phone viewport, persistence after reload, per-group currency, every URL loads, no console errors, no sideways scrolling | `npm run test:e2e` |
+| App (Vitest + jsdom) | Routing and readable group addresses, adding people and an expense, settlement shown, 404 pages, sign-in and code screens, account settings and photo upload, the Share dialog and invitations (accept, decline, unavailable), the activity bell (unread dot, live updates without duplicates, access filtering, keyboard) | `npm run test:unit` |
+| Database (PGlite) | The real migrations: RLS isolation between users, anonymous access denied, validation triggers, sharing rules, activity log, usernames and rate limits, invitations, avatar Storage policies, rollback scripts, v1 data upgrade, SQL balances equal JS balances | `npm run test:db` |
+| Browser (Playwright) | Production build in Chromium on desktop and a phone viewport: full guest flow, persistence after reload, per-group currency, every URL loads, money input rules, sign-in address cleanup and sign-up form, photo re-encoding and refusals, guests see no sharing or bell, no console errors, no sideways scrolling | `npm run test:e2e` |
 
 362 Vitest test cases (290 unit, hook, app and rollback-compatibility tests in `src`, 72 database tests) plus 14 Playwright scenarios, each run on a desktop and a phone viewport (28 browser runs). What is **not** automated: real email delivery and Supabase Realtime itself (checked by hand
 with the checklist above).
@@ -276,9 +323,12 @@ and the database rejects them again if the UI is bypassed. Failed cloud writes s
 affected group is re-read so the screen matches the server. Network, permission and validation errors are mapped to
 plain-language messages (`src/lib/errors.js`). Malformed, oversized or hand-edited backup files and storage are
 sanitised and skipped items are reported. Unknown pages and deleted groups show a 404 page; an error boundary
-prevents a blank screen.
+prevents a blank screen. Wrong or expired email codes, an expired sign-in link and a cancelled Google sign-in each get
+a specific message. Unsupported or oversized photos are refused before upload. An invitation that has expired or was
+revoked shows the database's reason and nothing changes. The activity bell has loading, empty, error-with-Retry and
+"live updates unavailable" states, and still shows recent history when Realtime is down.
 
-## Known limitations
+## Known limitations and deferred work
 
 - **Inviting needs an existing account with a chosen @username.** There are no invitation emails; the friend signs
   up first. Inviting reveals whether a username exists (usernames are public handles; it is rate limited).
@@ -290,6 +340,15 @@ prevents a blank screen.
 - **No currency conversion.** Each group has one currency; it changes the symbol and format only.
 - **Guest data lives only in the browser** until it is moved into an account or backed up.
 - Free-tier Supabase projects pause after a period of inactivity.
+- **No notifications outside the app.** There are no push, email or browser notifications; the bell is in-app only.
+
+Consciously deferred (not built yet):
+
+- **The owner linking their own account to a person in the group.** An owner cannot invite themselves, so the owner's
+  own name in a group is not linked to their account.
+- **Removing the retired email-invitation functions.** `invite_member()` now refuses with a message and
+  `list_members()` returns no emails; both are kept only so an older deployed app fails politely. A later migration
+  can drop them.
 
 ## Project history
 
@@ -300,6 +359,9 @@ prevents a blank screen.
   and fixed along the way: a Supabase URL ending in `/rest/v1/` (as in the local `.env`) sent every auth request to a
   wrong address, and the `groups` read policy rejected `insert ... returning` for a brand-new group, which is what
   v1's sync call did (reproduced in the database tests).
+- **After v2.0 (pull requests #2 to #7):** exact two-decimal money inputs; unique @usernames; email codes, Google
+  sign-in and change password; readable group addresses (`/groups/goa-trip`); profile photo uploads; invitations by
+  @username with accept and decline; the activity bell.
 
 ## AI assistance
 
