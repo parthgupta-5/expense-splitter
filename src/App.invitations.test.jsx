@@ -27,6 +27,7 @@ vi.mock('./data/cloudRepo', () => ({
   fetchProfile: vi.fn(),
   saveProfile: vi.fn(),
   subscribeToChanges: vi.fn(),
+  fetchActivity: vi.fn(),
   importGroup: vi.fn(),
   updateGroup: vi.fn(),
   listMembers: vi.fn(),
@@ -95,6 +96,7 @@ beforeEach(() => {
     clear: () => store.clear(),
   });
   repo.subscribeToChanges.mockReturnValue(() => {});
+  repo.fetchActivity.mockResolvedValue([]);
   repo.listMembers.mockResolvedValue(members);
   repo.listGroupInvitations.mockResolvedValue([]);
   repo.listMyInvitations.mockResolvedValue([]);
@@ -254,7 +256,8 @@ describe('invitee: Groups page', () => {
     repo.listMyInvitations.mockResolvedValue([pending]);
     repo.acceptInvitation.mockRejectedValue(new Error('This invitation has expired. Ask the owner to invite you again.'));
     renderAt('/groups');
-    await user.click(await screen.findByRole('button', { name: 'Accept' }));
+    const panel = (await screen.findByRole('heading', { level: 2, name: 'Invitations for you (1)' })).closest('.invitations-panel');
+    await user.click(within(panel).getByRole('button', { name: 'Accept' }));
     expect(await screen.findByText('This invitation has expired. Ask the owner to invite you again.')).toBeTruthy();
     expect(screen.getByTestId('location').textContent).toBe('/groups');
   });

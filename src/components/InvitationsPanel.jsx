@@ -36,9 +36,11 @@ export default function InvitationsPanel() {
     try {
       if (accepting) {
         const result = await repo.acceptInvitation(invitation.id);
-        await workspace.actions.refreshGroup(result.group_id);
+        const joined = await workspace.actions.refreshGroup(result.group_id)
+          || { id: result.group_id, name: invitation.group_name };
         notify.success(`You joined ${invitation.group_name} as ${result.person_name}`);
-        navigate(groupPath({ id: result.group_id, name: invitation.group_name }, workspace.groups));
+        // workspace.groups is from before the join, so the new group is added here to get its readable address.
+        navigate(groupPath(joined, [...workspace.groups.filter((item) => item.id !== joined.id), joined]));
       } else {
         await repo.declineInvitation(invitation.id);
         notify.info(`Invitation to ${invitation.group_name} declined`);

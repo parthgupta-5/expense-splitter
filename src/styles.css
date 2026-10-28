@@ -254,3 +254,19 @@ body{background:var(--page)}
   .invitations-panel .ant-list-item{flex-wrap:wrap;gap:8px}
   .invitations-panel .ant-list-item-action{margin-inline-start:0}
 }
+
+/* Activity bell (signed in): monochrome; green only for the unread and live dots. */
+.activity-bell{display:inline-flex;align-items:center}
+.activity-live{display:flex;align-items:center;gap:8px;margin:0 0 14px;font-size:12px;color:var(--muted)}
+.activity-live-dot,.activity-new-dot{display:inline-block;flex:none;width:7px;height:7px;border-radius:50%;background:#43a87a}
+.activity-error{margin-bottom:12px}
+.activity-loading{display:flex;align-items:center;gap:10px;padding:24px 4px}
+.activity-empty{padding:28px 0}
+.activity-feed{margin:0;padding:0;list-style:none;border-top:1px solid var(--line)}
+.activity-entry{display:flex;flex-direction:column;gap:4px;width:100%;padding:12px 6px;border:0;border-bottom:1px solid var(--line);background:none;color:var(--ink);text-align:left;cursor:pointer;border-radius:0;transition:background .18s ease}
+.activity-entry:hover{background:var(--soft)}
+.activity-entry:focus-visible{outline:2px solid var(--ink);outline-offset:-2px}
+.activity-entry-text{display:flex;align-items:baseline;gap:8px;font-size:13px;font-weight:600;line-height:1.45;overflow-wrap:anywhere}
+.activity-entry-text .activity-new-dot{transform:translateY(-1px)}
+.activity-entry-meta{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+.activity-panel-body:focus{outline:none}

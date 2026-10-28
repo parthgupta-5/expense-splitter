@@ -24,6 +24,7 @@ vi.mock('./data/cloudRepo', () => ({
   fetchProfile: vi.fn(),
   saveProfile: vi.fn(),
   subscribeToChanges: vi.fn(),
+  fetchActivity: vi.fn(),
   importGroup: vi.fn(),
   checkUsername: vi.fn(),
   suggestUsername: vi.fn(),
@@ -69,6 +70,7 @@ beforeEach(() => {
   };
   repo.fetchGroups.mockResolvedValue([]);
   repo.subscribeToChanges.mockReturnValue(() => {});
+  repo.fetchActivity.mockResolvedValue([]);
   repo.checkUsername.mockResolvedValue('available');
   repo.suggestUsername.mockResolvedValue('asharao');
 });

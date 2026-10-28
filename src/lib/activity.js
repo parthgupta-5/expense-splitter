@@ -18,7 +18,11 @@ export function describeActivity(entry, money) {
     case 'payment_deleted': return { kind: 'payment', text: `${who} removed a ${amount} payment from ${d.payer} to ${d.payee}` };
     case 'person_added': return { kind: 'people', text: `${who} added ${d.name} to the group` };
     case 'person_removed': return { kind: 'people', text: `${who} removed ${d.name} from the group` };
-    case 'member_joined': return { kind: 'group', text: `${d.name || 'A new member'} joined (invited by ${who})` };
+    case 'member_joined':
+      // Accepting a username invitation is done by the person joining, so they are also the actor.
+      return d.user_id && d.user_id === entry.actor_id
+        ? { kind: 'group', text: `${who} joined the group` }
+        : { kind: 'group', text: `${d.name || 'A new member'} joined (invited by ${who})` };
     case 'member_left': return { kind: 'group', text: `${d.name || 'A member'} left the group` };
     case 'group_created': return { kind: 'group', text: `${who} created the group` };
     case 'group_imported': return { kind: 'group', text: `${who} moved this group from their device into their account` };

@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
+import {
+  useCallback, useEffect, useMemo, useReducer, useRef, useState,
+} from 'react';
 import * as repo from '../data/cloudRepo';
 import { supabaseUrl } from '../supabase';
 import { ownAvatarPath } from '../lib/avatarUrl';
@@ -88,13 +90,15 @@ export function useWorkspace({ user, authReady, notify }) {
     return () => clearTimeout(timer);
   }, [mode, status, profileUserId, savedPeople, preferences]);
 
+  // Resolves to the group as just loaded (null when it is gone), so callers can use it before the next render.
   const refreshGroup = useCallback(async (groupId) => {
     const { mode: currentMode, userId: uid } = stateRef.current;
-    if (currentMode !== 'cloud') return;
+    if (currentMode !== 'cloud') return undefined;
     try {
       const group = await repo.fetchGroup(groupId, uid);
-      if (stateRef.current.userId !== uid) return;
+      if (stateRef.current.userId !== uid) return undefined;
       dispatch(group ? { type: 'upsertGroup', group } : { type: 'removeGroup', groupId });
+      return group;
     } catch {
       // Offline or a transient error: the next change event or tab focus retries.
     }
@@ -111,26 +115,45 @@ export function useWorkspace({ user, authReady, notify }) {
     }
   }, []);
 
-  // Live updates from other members, plus a full refresh when the tab becomes visible again.
+  // Live updates from other members, plus a full refresh when the tab becomes visible again. The same channel feeds
+  // the activity bell (through onActivity), so there is only ever one subscription.
+  // The channel's state for this account: 'off' (guest) | 'connecting' | 'live' | 'offline'.
+  const [channel, setChannel] = useState({ userId: null, status: 'connecting' });
+  let realtime = 'off';
+  if (mode === 'cloud' && profileUserId) realtime = channel.userId === profileUserId ? channel.status : 'connecting';
+  const activityListeners = useRef(new Set());
   useEffect(() => {
     if (mode !== 'cloud' || !profileUserId) return undefined;
+    let active = true;
     const timers = new Map();
     const schedule = (groupId) => {
       clearTimeout(timers.get(groupId));
       timers.set(groupId, setTimeout(() => { timers.delete(groupId); refreshGroup(groupId); }, REFRESH_DELAY_MS));
     };
     const unsubscribe = repo.subscribeToChanges({
-      onGroupChanged: schedule,
+      onGroupChanged: (groupId, row) => {
+        schedule(groupId);
+        if (row) activityListeners.current.forEach((listener) => listener(row));
+      },
       onGroupDeleted: (groupId) => dispatch({ type: 'removeGroup', groupId }),
+      onStatus: (status) => { if (active) setChannel({ userId: profileUserId, status }); },
     });
     const onVisible = () => { if (document.visibilityState === 'visible') reloadAll(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
+      active = false;
+      setChannel({ userId: null, status: 'connecting' });
       unsubscribe();
       timers.forEach(clearTimeout);
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [mode, profileUserId, refreshGroup, reloadAll]);
+
+  /** Calls `listener(row)` for every activity row that arrives live. Returns the function that stops it. */
+  const onActivity = useCallback((listener) => {
+    activityListeners.current.add(listener);
+    return () => { activityListeners.current.delete(listener); };
+  }, []);
 
   const actions = useMemo(() => {
     const isCloud = () => stateRef.current.mode === 'cloud';
@@ -307,8 +330,9 @@ export function useWorkspace({ user, authReady, notify }) {
       },
       refreshGroup,
       reload: reloadAll,
+      onActivity,
     };
-  }, [refreshGroup, reloadAll]);
+  }, [refreshGroup, reloadAll, onActivity]);
 
-  return { ...state, actions };
+  return { ...state, realtime, actions };
 }

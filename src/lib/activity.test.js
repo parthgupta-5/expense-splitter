@@ -17,6 +17,12 @@ describe('describeActivity', () => {
       .toBe('Ben joined (invited by Asha)');
   });
 
+  it('says someone joined, not that they invited themselves, when they accepted an invitation', () => {
+    expect(describeActivity({
+      action: 'member_joined', actor_id: 'u-ben', actor_name: 'Ben', details: { user_id: 'u-ben', name: 'Ben' },
+    }, money).text).toBe('Ben joined the group');
+  });
+
   it('never crashes on an unknown action', () => {
     expect(describeActivity({ action: 'something_new', actor_name: 'Asha' }, money).text).toBe('Asha: something_new');
   });

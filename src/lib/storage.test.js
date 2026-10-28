@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   LEGACY_STATE_KEYS, LEGACY_SYNC_META_KEY, MIRROR_MARK, STATE_KEY, clearGuestState, dropLegacyCloudCopies, isNonEmptyGroup,
-  legacyGroup, newGroup, readGuestState, readSaved, writeGuestState,
+  legacyGroup, newGroup, readActivitySeen, readGuestState, readSaved, writeActivitySeen, writeGuestState,
 } from './storage';
 
 // Node 25+ ships an incomplete global localStorage, so tests use a small in-memory stand-in.
@@ -104,5 +104,20 @@ describe('guest state', () => {
     expect(group.expenses).toEqual([]);
     expect(isNonEmptyGroup(group)).toBe(true);
     expect(isNonEmptyGroup(legacyGroup({}))).toBe(false);
+  });
+});
+
+describe('activity seen marker (signed in, this device only)', () => {
+  it('is kept per account and ignores damaged values', () => {
+    expect(readActivitySeen('u1')).toBeNull();
+    writeActivitySeen('u1', 12);
+    writeActivitySeen('u2', 3);
+    expect(readActivitySeen('u1')).toBe(12);
+    expect(readActivitySeen('u2')).toBe(3);
+    localStorage.setItem('expenseSplitterActivitySeenV1', JSON.stringify({ u1: 'lots', u2: -4 }));
+    expect(readActivitySeen('u1')).toBeNull();
+    expect(readActivitySeen('u2')).toBeNull();
+    localStorage.setItem('expenseSplitterActivitySeenV1', '{broken');
+    expect(readActivitySeen('u1')).toBeNull();
   });
 });
