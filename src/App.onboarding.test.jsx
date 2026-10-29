@@ -28,6 +28,7 @@ vi.mock('./supabase', () => ({
 }));
 vi.mock('./state/useAuth', () => ({ useAuth: () => mocks.auth }));
 vi.mock('./data/cloudRepo', () => ({
+  listFriends: vi.fn(() => Promise.resolve([])),
   fetchGroups: vi.fn(),
   fetchGroup: vi.fn(),
   fetchProfile: vi.fn(),
@@ -206,10 +207,10 @@ describe('empty states', () => {
     expect(await screen.findByText(/No one here yet\. Add the people who share costs/)).toBeTruthy();
   });
 
-  it('history with nothing in it points back to the groups', async () => {
+  it('recent activities with nothing in them point back to the groups', async () => {
     const user = userEvent.setup();
     signIn({ groups: [cloudGroup()] });
-    renderAt('/history');
+    renderAt('/activity');
     const empty = (await screen.findByText(/No history yet/)).closest('.ant-empty');
     await user.click(within(empty).getByRole('button', { name: 'Go to your groups' }));
     await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/groups'));

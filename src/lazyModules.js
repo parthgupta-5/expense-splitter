@@ -10,6 +10,7 @@ export const lazyModules = {
   GroupsPage: () => import('./pages/GroupsPage'),
   HistoryPage: () => import('./pages/HistoryPage'),
   PeoplePage: () => import('./pages/PeoplePage'),
+  RestoreAccountPage: () => import('./pages/RestoreAccountPage'),
   ProfilePage: () => import('./pages/ProfilePage'),
   SettingsPage: () => import('./pages/SettingsPage'),
   ResetPasswordPage: () => import('./pages/ResetPasswordPage'),

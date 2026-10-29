@@ -169,17 +169,44 @@ export class AccountDeletionError extends Error {
 
 /**
  * Asks the delete-account Edge Function to delete the signed-in account (it checks the session, a recent sign-in and
- * the typed username, then removes photos and the user). Resolves only once the account is deleted.
+ * the typed username). The account is disabled at once and deleted for good after 7 days unless it is restored.
+ * Resolves to { scheduled: true, deletes_on } once that is done.
  */
 export async function deleteAccount(confirm) {
   const { data, error } = await supabase.functions.invoke('delete-account', { body: { confirm } });
-  if (!error && data?.deleted) return data;
+  if (!error && data?.scheduled) return data;
   let reason = {};
   try { reason = (await error?.context?.json?.()) || {}; } catch { /* not a JSON reply */ }
   if (!reason.code && /failed to send|fetch/i.test(String(error?.message))) {
     reason = { code: 'network', message: "Can't reach the server. Check your connection. Nothing was deleted." };
   }
   throw new AccountDeletionError(reason);
+}
+
+/** Takes back an account that is waiting to be deleted (within 7 days of asking). */
+export async function restoreAccount() {
+  return orError(check(await supabase.rpc('restore_account')));
+}
+
+// Friends (2026110201_friends_and_account_recovery.sql). A request becomes a friendship only when it is accepted.
+
+/** Friends and pending requests: { friendship_id, user_id, username, display_name, avatar_url, status, direction }. */
+export async function listFriends() {
+  return check(await supabase.rpc('list_friends')) || [];
+}
+
+/** Sends a friend request to an exact @username (or accepts theirs, if they already asked). */
+export async function sendFriendRequest(username) {
+  return orError(check(await supabase.rpc('send_friend_request', { friend_username: username })));
+}
+
+export async function respondFriendRequest(requestId, accepting) {
+  return orError(check(await supabase.rpc('respond_friend_request', { request_id: requestId, accepting })));
+}
+
+/** Removes a friend, or cancels a request you sent. */
+export async function removeFriend(friendId) {
+  return orError(check(await supabase.rpc('remove_friend', { friend_id: friendId })));
 }
 
 export async function removeMember(groupId, userId) {

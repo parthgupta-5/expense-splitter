@@ -24,6 +24,8 @@ vi.mock('./supabase', () => ({
 }));
 vi.mock('./state/useAuth', () => ({ useAuth: () => mocks.auth }));
 vi.mock('./data/cloudRepo', () => ({
+  listFriends: vi.fn(() => Promise.resolve([])),
+  respondFriendRequest: vi.fn(),
   fetchGroups: vi.fn(),
   fetchGroup: vi.fn(),
   fetchProfile: vi.fn(),
@@ -51,7 +53,6 @@ vi.mock('./data/cloudRepo', () => ({
 
 const OWNER = 'owner-1';
 const FRIEND = 'friend-1';
-const SEEN_KEY = 'expenseSplitterInvitationsSeenV1';
 const group = (role, { ownerLinked = true } = {}) => ({
   id: 'g-1',
   name: 'Goa trip',
@@ -146,6 +147,7 @@ beforeEach(() => {
   repo.fetchGroup.mockImplementation(() => Promise.resolve(group('owner')));
   repo.listMembers.mockResolvedValue(members);
   repo.listMyInvitations.mockResolvedValue([]);
+  repo.listFriends.mockResolvedValue([]);
   repo.listGroupPeople.mockResolvedValue(ownerStatuses());
   repo.saveProfile.mockResolvedValue(); // adding a guest also saves them to the profile's saved people
 });
@@ -521,10 +523,14 @@ describe('invitee: Groups page', () => {
   });
 });
 
-describe('invitations in the notification bell', () => {
+describe('invitations and friend requests in the notification bell', () => {
   const pending = {
     id: 'i-1', group_id: 'g-9', group_name: 'Flat rent', person_name: 'Ben', invited_by_name: 'Owner',
     invited_by_username: 'owner_one', status: 'pending', expires_at: '2026-11-30T00:00:00Z',
+  };
+  const friendRequest = {
+    friendship_id: 'f-1', user_id: 'user-9', username: 'priya', display_name: 'Priya', avatar_url: null,
+    status: 'pending', direction: 'incoming',
   };
   const bellButton = () => document.querySelector('.activity-bell button');
   const bellLabelBecomes = async (label) => {
@@ -536,29 +542,26 @@ describe('invitations in the notification bell', () => {
     return document.querySelector('.activity-drawer .ant-drawer-section');
   };
 
-  it('shows a new invitation with a count; opening the bell clears the count but keeps the invitation pending', async () => {
+  it('counts what waits for an answer; opening the bell answers nothing and keeps the count', async () => {
     const user = userEvent.setup();
     signIn(FRIEND, []);
     repo.listMyInvitations.mockResolvedValue([pending]);
-    renderAt('/history');
-    await bellLabelBecomes('Notifications (1 new invitation)');
-    expect(document.querySelector('.activity-bell .ant-badge-count').textContent).toBe('1');
+    repo.listFriends.mockResolvedValue([friendRequest]);
+    renderAt('/activity');
+    await bellLabelBecomes('Notifications (1 group invitation and 1 friend request)');
+    expect(document.querySelector('.activity-bell .ant-badge-count').textContent).toBe('2');
 
     const drawer = await openBell(user);
     const item = (await within(drawer).findByText(/invited you to join/)).closest('.bell-invitation');
     expect(item.textContent).toMatch(/^Owner \(@owner_one\) invited you to join Flat rent\.You would join as Ben/);
-    await bellLabelBecomes('Notifications');
-    expect(JSON.parse(store.get(SEEN_KEY))[FRIEND]).toEqual(['i-1']);
+    expect(await within(drawer).findByText(/wants to be your friend/)).toBeTruthy();
+    await bellLabelBecomes('Notifications (1 group invitation and 1 friend request)');
     expect(repo.acceptInvitation).not.toHaveBeenCalled();
     expect(repo.declineInvitation).not.toHaveBeenCalled();
     expect(within(item).getByRole('button', { name: 'Accept the invitation to Flat rent' })).toBeTruthy();
-
-    cleanup();
-    renderAt('/history'); // a reload on this device: still seen, still pending
-    await waitFor(() => expect(repo.listMyInvitations.mock.calls.length).toBeGreaterThan(2));
-    await bellLabelBecomes('Notifications');
-    const again = await openBell(user);
-    expect(await within(again).findByText(/invited you to join/)).toBeTruthy();
+    // Group activity is not in the bell any more; it links to the Recent activities page instead.
+    expect(within(drawer).queryByText(/No recent activity/)).toBeNull();
+    expect(within(drawer).getByText('See recent activities in your groups').closest('a').getAttribute('href')).toBe('/activity');
   });
 
   it('accepts from the bell: joins, opens the group and closes the panel', async () => {
@@ -567,7 +570,7 @@ describe('invitations in the notification bell', () => {
     repo.listMyInvitations.mockResolvedValue([pending]);
     repo.acceptInvitation.mockResolvedValue({ group_id: 'g-9', person_name: 'Ben', status: 'accepted' });
     repo.fetchGroup.mockResolvedValue({ ...group('member'), id: 'g-9', name: 'Flat rent' });
-    renderAt('/history');
+    renderAt('/activity');
     const drawer = await openBell(user);
     await user.click(await within(drawer).findByRole('button', { name: 'Accept the invitation to Flat rent' }));
     await waitFor(() => expect(repo.acceptInvitation).toHaveBeenCalledWith('i-1'));
@@ -584,7 +587,7 @@ describe('invitations in the notification bell', () => {
       repo.listMyInvitations.mockResolvedValue([{ ...pending, status: 'declined' }]);
       return Promise.resolve({ status: 'declined' });
     });
-    renderAt('/history');
+    renderAt('/activity');
     const drawer = await openBell(user);
     await user.click(await within(drawer).findByRole('button', { name: 'Decline the invitation to Flat rent' }));
     const confirmation = (await screen.findByText('Decline the invitation to Flat rent?')).closest('.ant-popover');
@@ -595,12 +598,30 @@ describe('invitations in the notification bell', () => {
     expect(within(drawer).queryByText(/invited you to join/)).toBeNull();
   });
 
+  it('accepts a friend request from the bell', async () => {
+    const user = userEvent.setup();
+    signIn(FRIEND, []);
+    repo.listFriends.mockResolvedValue([friendRequest]);
+    repo.respondFriendRequest.mockImplementation(() => {
+      repo.listFriends.mockResolvedValue([{ ...friendRequest, status: 'accepted' }]);
+      return Promise.resolve({ status: 'accepted' });
+    });
+    renderAt('/activity');
+    await bellLabelBecomes('Notifications (1 friend request)');
+    const drawer = await openBell(user);
+    await user.click(await within(drawer).findByRole('button', { name: 'Accept the friend request from @priya' }));
+    await waitFor(() => expect(repo.respondFriendRequest).toHaveBeenCalledWith('f-1', true));
+    expect(await screen.findByText('You and @priya are now friends')).toBeTruthy();
+    expect(await within(drawer).findByText('No friend requests.')).toBeTruthy();
+    await bellLabelBecomes('Notifications');
+  });
+
   it('drops an invitation that was revoked or expired as soon as the live channel says so', async () => {
     const user = userEvent.setup();
     signIn(FRIEND, []);
     repo.listMyInvitations.mockResolvedValue([pending]);
-    renderAt('/history');
-    await bellLabelBecomes('Notifications (1 new invitation)');
+    renderAt('/activity');
+    await bellLabelBecomes('Notifications (1 group invitation)');
     const drawer = await openBell(user);
     expect(await within(drawer).findByText(/invited you to join/)).toBeTruthy();
     repo.listMyInvitations.mockResolvedValue([{ ...pending, status: 'revoked' }]);
@@ -610,23 +631,13 @@ describe('invitations in the notification bell', () => {
     await bellLabelBecomes('Notifications');
   });
 
-  it('follows another tab that already opened the bell', async () => {
-    signIn(FRIEND, []);
-    repo.listMyInvitations.mockResolvedValue([pending]);
-    renderAt('/history');
-    await bellLabelBecomes('Notifications (1 new invitation)');
-    store.set(SEEN_KEY, JSON.stringify({ [FRIEND]: ['i-1'] }));
-    act(() => { window.dispatchEvent(new StorageEvent('storage', { key: SEEN_KEY })); });
-    await bellLabelBecomes('Notifications');
-  });
-
-  it('says when there is nothing: no pending invitations and no activity', async () => {
+  it('says when there is nothing waiting', async () => {
     const user = userEvent.setup();
     signIn(FRIEND, [group('member')]);
-    renderAt('/history');
+    renderAt('/activity');
     const drawer = await openBell(user);
-    expect(await within(drawer).findByText('You are all caught up. Nothing needs your attention.')).toBeTruthy();
+    expect(await within(drawer).findByText('You are all caught up. Nothing needs your answer.')).toBeTruthy();
     expect(within(drawer).getByText('No pending invitations.')).toBeTruthy();
-    expect(within(drawer).getByText(/No recent activity in your groups/)).toBeTruthy();
+    expect(within(drawer).getByText('No friend requests.')).toBeTruthy();
   });
 });

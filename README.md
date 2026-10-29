@@ -1,155 +1,205 @@
 # Expense Splitter
 
-Split shared costs with friends, flatmates or travel groups, share the group so everyone can add expenses, and
-settle up with a suggested plan of at most N−1 payments for N people.
+Split shared costs with friends, flatmates or travel groups, share the group so everyone adds their own expenses, and
+settle up with a plan of at most N−1 payments for N people.
 
-> **Links**
+> **End-term project submission**
 >
-> - Author: Parth Gupta
-> - Repository: https://github.com/parthgupta-5/expense-splitter
-> - Live app: https://expense-splitter-two-liart.vercel.app/
-> - Demo video: https://drive.google.com/drive/folders/18WCMGBshCLx_oNikPugSDe6uieNrnyx3?usp=sharing
+> | | |
+> |---|---|
+> | Student | Parth Gupta |
+> | Live app | https://expense-splitter-two-liart.vercel.app/ |
+> | Repository | https://github.com/parthgupta-5/expense-splitter |
+> | Demo video | https://drive.google.com/drive/folders/18WCMGBshCLx_oNikPugSDe6uieNrnyx3?usp=sharing |
+> | Tech stack | React 19, Vite, Ant Design, Supabase (Postgres, Auth, Row Level Security, Realtime, Storage, Edge Functions), Vercel |
+
+## Contents
+
+1. [Try it in 5 minutes](#try-it-in-5-minutes)
+2. [Problem statement](#problem-statement)
+3. [Target users](#target-users)
+4. [Solution](#solution)
+5. [Key features and core workflows](#key-features-and-core-workflows)
+6. [Tech stack](#tech-stack)
+7. [Architecture](#architecture)
+8. [Engineering decisions](#engineering-decisions)
+9. [Security](#security)
+10. [Error handling](#error-handling)
+11. [Testing](#testing)
+12. [Local setup](#local-setup)
+13. [Environment variables](#environment-variables)
+14. [Deployment](#deployment)
+15. [Known limitations](#known-limitations)
+16. [Project history](#project-history)
+17. [AI usage](#ai-usage)
+18. [Originality](#originality)
+
+---
+
+## Try it in 5 minutes
+
+No account is needed for the first part.
+
+1. Open the [live app](https://expense-splitter-two-liart.vercel.app/) and create a group (for example "Goa trip").
+2. Add three people, then add expenses with different split types: equal, exact amounts, shares and percentages.
+3. Open **Balances**: each person shows "Owes ₹…", "Is owed ₹…" or "Settled", with the shortest repayment plan.
+   Record one payment and watch the plan shrink.
+4. Sign up (email with a 6-digit code, or Google) and choose a @username. The app offers to move the group you made
+   as a guest into your account.
+5. To see sharing, use a second browser (or a private window) with a second account:
+   - **Friends** → send a friend request to the other @username. The other account accepts it from the 🔔 bell.
+   - On the Friends page, **Add to group** adds that friend to your group and sends the group invitation.
+   - The friend accepts from the bell and the group opens. Expenses added in one browser appear in the other without
+     a reload.
+6. **Recent Activities** shows who did what across your groups. **Settings → Delete account** switches the account
+   off and gives it 7 days to be restored by signing in again.
+
+---
 
 ## Problem statement
 
 Group spending (trips, rent, dinners) ends in awkward maths: who paid, who took part, who owes whom, and how many
 transfers it takes to clear everything. Spreadsheets break on uneven splits, one person ends up doing all the data
-entry, and most apps force an account before they are useful.
+entry, and most apps force an account before they are useful at all.
 
 ## Target users
 
 Friends, flatmates, couples and travel groups who share costs and want a clear, fair settle-up plan. They can start
-without signing up, and sign in when they want their groups on every device or shared with the group.
+without signing up, and sign in when they want their groups on every device or shared with the rest of the group.
 
 ## Solution
 
-A web app that is useful **without an account**, with an optional account for sync and sharing:
+A web app that is useful **without an account**, with an optional account for syncing and sharing:
 
-- **Guest mode (no sign-up):** everything works immediately and is saved in this browser.
-- **Signed in:** groups live in Postgres (Supabase), sync across devices, and can be **shared**. The creator is in the
-  group from the start; friends are added by their @username (which also invites them) or as guests, and once they
-  accept they add expenses and payments themselves and see each other's changes live.
-- The settle-up engine nets every balance in integer cents and produces a plan with at most N-1 payments.
+- **Guest mode:** everything works at once and is saved in this browser. Nothing is sent to a server.
+- **Signed in:** groups live in Postgres, sync across devices and can be **shared**. Each member adds their own
+  expenses and payments, and sees everyone else's changes live.
+- **People you split with** can be friends with accounts (connected by a friend request and a group invitation that
+  they accept) or plain names ("guests") for people who will never sign up.
+- **The settle-up engine** works in whole cents (paise), never loses a paisa to rounding, and produces a plan with
+  at most N−1 payments.
 
-## Key features
+---
 
-1. **Groups, people and currencies.** Several groups, each with its own currency, and a reusable list of saved people.
-   Names are trimmed and de-duplicated (case-insensitive).
-2. **Expenses.** Pick who paid and who took part, then split **equally, by custom amounts, by shares or by
-   percentages**. Splits use the largest-remainder method in whole cents, so the parts always add up exactly to the
-   total. Expenses can be edited and deleted. An old expense that still names someone who has since been removed cannot
-   be edited until they are added back (editing would silently move their share onto everyone else). Each row says who
-   paid; who *added* an expense is in the group's history.
-3. **Balances and settling up.** Live net balance per person in words ("Owes ₹150.00", "Is owed ₹300.00",
-   "Settled") and a suggested repayment plan of at most N−1 payments. The group's summary says what is left to settle
-   ("Ben owes you ₹1,050.00", "All settled"). Recording a repayment larger than what is owed asks for confirmation.
-   Someone who still owes or is owed money cannot be removed.
-4. **People and sharing.** **Participants** are the people in a group's expenses; **members** are the accounts that can
-   open the group. Whoever creates a group (signed in) is its first participant, so they can pay and share at once.
-   **Add people** offers two choices: **Add by username** (owner only) finds an exact @username, shows only their
-   display name, @username and photo, then adds them as a person *and* sends the invitation in one step; they can be
-   included in expenses straight away and get access once they accept (accepting links that same person, no
-   duplicates). **Add guest** adds just a name: no account, invitation or email. Each person shows what they are (you,
-   member, invitation pending, declined/expired/revoked, guest), and an answered invitation always has a next step
-   (Resend, Keep as guest, Remove). Owners of older groups can add or link themselves, and an owner can take themselves
-   out of the expenses when settled. Only the owner renames the group or changes its currency. Nobody sees anyone's
-   email address. Changes from other members appear without a reload (Supabase Realtime).
-5. **Notifications and history.** The bell lists invitations waiting for your answer (Accept or Decline right there)
-   and the latest activity across your groups, live. Its count is what is new since you last opened it on this device;
-   opening it never answers or hides an invitation. Every group also has a server-written log of who did what
-   ("Asha added 'Dinner' · ₹1,200"), and point-in-time **saved splits** (snapshots) can be viewed later.
-6. **Accounts.** Email and password sign-up confirmed with a 6-digit email code, Google sign-in, password reset by
-   emailed code, and a change-password option in Settings. Each account chooses a unique @username at first sign-in and
-   can upload a profile photo (re-encoded in the browser, metadata removed). Groups made before signing in can be
-   moved into the account in one click. Settings has a section menu for **Account** (photo, masked email, username,
-   sign-in method, display name), **Preferences** (default currency, light or dark theme) and **Data** (backup).
-7. **Backup and export.** JSON backup and restore with validation, and CSV export that is safe to open in spreadsheets.
-8. **Proper URLs.** Every page and every group has its own address, so the back button, refresh and bookmarks work.
-9. **First-time guidance and empty states.** A short, dismissible welcome for new accounts (with "Create your first
-   group") and for guests on a fresh device; every empty list says what to do next.
-10. **Privacy, terms and account deletion.** Public `/privacy` and `/terms` pages (plain language, project/MVP, not
-    legal advice), linked from every page footer (Settings included) and the sign-up form. Settings ends with a separate
-    **Delete account** section (see "Account deletion and data retention" below).
+## Key features and core workflows
 
-## How using the app without signing up works
+The project is built around five workflows, each implemented end to end: UI, validation, database rules and tests.
 
-This is a deliberate design choice (guest mode), not a gap in security:
+### 1. Record and split expenses
 
-1. **Guests' data never leaves the browser.** `src/state/useWorkspace.js` loads guest data from `localStorage`
-   (`readGuestState()` in `src/lib/storage.js`) and saves it back after every change (`writeGuestState()`). No account
-   is needed because nothing is sent to a server.
-2. **The cloud is only used with a session.** `useAuth()` asks Supabase for the current session. With no session the
-   workspace stays in `guest` mode and never calls the database.
-3. **The database refuses guests anyway.** Every table has Row Level Security policies written `to authenticated`, so
-   a request without a valid login token is rejected by Postgres itself. The database tests prove this
-   (`supabase/tests/database.test.js`, "gives anonymous visitors no access at all").
-4. **Trade-off:** guest data exists only in that browser. It is lost if site data is cleared, which is why the app
-   offers backups and moves guest groups into an account when the user signs in.
+- Several groups, each with its own currency.
+- Pick who paid and who took part, then split **equally, by exact amounts, by shares or by percentages**.
+- Every amount is stored as an integer number of cents. Splits use the largest-remainder method, so the parts always
+  add up exactly to the total (₹100 split three ways is 33.34 + 33.33 + 33.33).
+- Expenses can be edited and deleted. An old expense that names someone who has since been removed cannot be edited
+  until they are added back, because editing would silently move their share onto everyone else.
+
+### 2. See balances and settle up
+
+- A live net balance per person in plain words ("Owes ₹150.00", "Is owed ₹300.00", "Settled").
+- A suggested repayment plan of at most N−1 payments, which can be copied as text to share in a chat.
+- Recording a repayment updates the plan. Paying more than is owed asks for confirmation.
+- Someone who still owes or is owed money cannot be removed from the group.
+
+### 3. Share a group with other people
+
+- Whoever creates a group (signed in) is its first participant, so they can pay and split straight away.
+- **Add by username** (owner only): looks up an exact @username, then adds that person to the expenses *and* sends a
+  group invitation in one step. They can be included in expenses at once and get access when they accept.
+- **Add guest:** just a name, with no account, invitation or email.
+- Each person shows what they are (you, member, invitation pending, declined, expired, guest), and every answered
+  invitation has a next step (Resend, Keep as guest, Remove).
+- Only the owner renames the group, changes its currency, manages invitations or deletes the group. Members can leave.
+- Changes from other members appear live, without a reload (Supabase Realtime).
+
+### 4. Friends
+
+- Send a friend request to an exact @username. It becomes a friendship only when the other person **accepts**.
+- Requests are answered in the 🔔 bell or on the Friends page. After a decline, the sender can ask again after
+  7 days. Sent requests can be cancelled and friends can be removed.
+- **Add to group:** adds a friend to any group you own in one click, which sends them the group invitation.
+
+### 5. Account lifecycle
+
+- Sign-up by email and password confirmed with a 6-digit code, Google sign-in, password reset by emailed code, and a
+  change-password option. Each account picks a unique @username and can upload a profile photo.
+- Groups made as a guest can be moved into the account in one click when signing in.
+- **Deleting an account has a 7-day safety window.** The account is switched off straight away: it is signed out
+  everywhere, cannot be found, invited or befriended, and pending invitations and friend requests are withdrawn.
+  Signing in within 7 days shows a **Restore my account** screen. After 7 days a scheduled job deletes it for good.
+
+### Supporting features
+
+- **🔔 Notifications:** the bell holds only what waits for an answer (group invitations and friend requests). Its
+  count is how many are waiting.
+- **Recent Activities:** a server-written log of who did what across your groups ("Asha added 'Dinner' · ₹1,200"),
+  plus point-in-time **saved splits** (snapshots of a settle-up).
+- **Backup and export:** JSON backup and restore with validation, and a per-group CSV export that is safe to open in
+  spreadsheets.
+- **Real URLs:** every page and group has its own address (`/groups/goa-trip`), so back, refresh and bookmarks work.
+- **First-time guidance:** a dismissible welcome and empty states that say what to do next.
+- **Light and dark theme**, a layout that works on phones, and keyboard and screen-reader support.
+- **Privacy Policy and Terms** pages, linked from every page footer and the sign-up form.
+
+---
 
 ## Tech stack
 
 | Layer | Choice | Why |
 |---|---|---|
-| UI | React 19, React Router 7, Ant Design 6, Vite | Fast SPA with accessible components and real URLs |
-| Backend | Supabase: Postgres, Auth, Row Level Security, Realtime, SQL functions | Managed auth; authorisation and validation enforced in the database |
-| Hosting | Vercel (static SPA) | Free tier, redeploys on every push |
-| Tests | Vitest, Testing Library, PGlite (Postgres in WebAssembly), Playwright | Money logic, data layer, security policies and real browser flows |
-| Quality | ESLint (incl. React Hooks rules), GitHub Actions CI, secret scan | Every pull request and push to `main` is linted, tested and built |
+| UI | React 19, React Router 7, Ant Design 6, Vite | Fast single-page app with accessible components and real URLs |
+| Backend | Supabase: Postgres, Auth, Row Level Security, Realtime, Storage, SQL functions | Managed sign-in; authorisation and validation enforced inside the database, not just in the UI |
+| Server code | Supabase Edge Functions (Deno) | The two tasks that need the admin key: switching an account off, and the daily final deletion |
+| Hosting | Vercel (static site) | Free tier, redeploys on every push |
+| Tests | Vitest, Testing Library, PGlite (Postgres in WebAssembly), Playwright | Money logic, screens, the real SQL security rules, and real browser flows |
+| Quality | ESLint (with React Hooks rules), GitHub Actions CI, a secret scanner | Every pull request and push to `main` is linted, tested and built |
+
+There is no custom backend server. The browser talks to Supabase directly with the public key and the signed-in
+user's token, and **Postgres decides what each user may do**. This removes a whole layer to build, host and secure,
+and it means a rule cannot be skipped by calling the API without the app.
+
+---
 
 ## Architecture
 
-In brief:
+```text
+Browser (React SPA, served by Vercel)
+ ├─ src/main.jsx               router + AppProvider (shared state) + error boundary
+ ├─ src/App.jsx                layout and routes: /groups, /groups/:group, /activity, /friends, /settings, /profile,
+ │                             /auth/callback, /reset-password, /privacy, /terms (+ the restore screen)
+ ├─ src/pages/                 one component per route, loaded on demand
+ ├─ src/components/            forms, lists, dialogs, the bell, the top bar
+ ├─ src/state/
+ │    AppContext.jsx           provides auth, workspace, invitations and friends to every page
+ │    useAuth.js               Supabase session, email codes, Google sign-in, password reset
+ │    useWorkspace.js          guest (localStorage) or signed-in (Supabase) data, optimistic updates, realtime
+ │    workspaceReducer.js      pure state transitions (unit-tested)
+ │    useInvitations.js        the user's group invitations, accept and decline
+ │    useFriends.js            friends and friend requests, accept and decline
+ │    useGroupPeople.js        each person's status in a group (member, invitation pending, guest)
+ ├─ src/data/cloudRepo.js      every Supabase query and function call in one place
+ └─ src/lib/                   pure logic: splits, balances, settlement, money, people, backup, CSV, storage
+          │  HTTPS (public key + user token)          ▲ Realtime (websocket, filtered by Row Level Security)
+          ▼                                           │
+Supabase
+ ├─ Auth           email + 6-digit codes, Google (PKCE)
+ ├─ Postgres       normalised tables, Row Level Security on every table, validation triggers,
+ │                 security-definer functions for every multi-step action, an activity log written by triggers
+ ├─ Realtime       activity rows and a per-user "something changed" signal for invitations and friend requests
+ ├─ Storage        `avatars` bucket; each user writes only their own folder
+ └─ Edge Functions `delete-account` (switch an account off, restorable for 7 days)
+                   `purge-deleted-accounts` (run daily by a cron job: final deletion after 7 days)
+```
 
-- **Frontend:** a React single-page app built with Vite and served as static files by Vercel. There is no custom
-  server: the browser talks to Supabase directly with the public anon key and the signed-in user's token.
-- **Supabase:** **Auth** handles sessions (email and password with 6-digit codes, Google, both using PKCE).
-  **Postgres** holds every signed-in group as normalised rows. **Row Level Security** decides who may read or write
-  each row. **Realtime** pushes new activity-log rows to the members of a group. **Storage** holds profile photos.
-- **Guest mode:** with no session, the same app keeps its data in `localStorage` and never calls the database.
-- **Money:** every amount is an integer number of cents (paise) in the app, in backups and in `bigint` database
-  columns; splits use the largest-remainder method, so parts always add up exactly. Decimals are only for display.
-- **Authorisation and ownership:** Postgres is the authority, not the UI. Group access comes from `group_members`;
-  the owner (`created_by`, locked after insert) alone renames the group, changes its currency, deletes it and
-  manages invitations. Invitations, membership changes and the activity log go only through security-definer
-  functions and triggers, which re-check the caller. Hiding a button is only a convenience.
-- **Testing:** pure logic and React screens run in Vitest (jsdom, mocked Supabase). The real SQL migrations, policies
-  and rollbacks run in PGlite (Postgres compiled to WebAssembly), acting as different users. The production build is
-  driven in real Chromium by Playwright. CI runs all of it on every pull request and every push to `main`.
+### How a request flows: sharing a group
 
 ```text
-Browser (React SPA on Vercel)
- ├─ src/main.jsx                 BrowserRouter + AppProvider (context) + error boundary
- ├─ src/App.jsx                  layout and routes: /groups/:groupId, /groups, /history, /people, /settings, /profile,
- │                               /auth/callback (email links and Google), /reset-password, /privacy, /terms
- ├─ src/lazyModules.js           the pages and dialogs that load on demand, listed once (tests preload them)
- ├─ src/pages/                   one component per route (lazy-loaded)
- ├─ src/components/              forms, lists, tabs, dialogs (expense, members, group settings, auth, import)
- ├─ src/state/
- │    AppContext.jsx             provides auth + workspace + notifications to every page (no prop drilling)
- │    useAuth.js                 Supabase session, email codes, Google sign-in, password reset and change
- │    useActivityFeed.js         the bell's activity list and its per-device unread marker
- │    useInvitations.js          the user's invitations (bell + Groups page), accept/decline, per-device "seen"
- │    useGroupPeople.js          each person's status in a group (member, invitation pending, guest)
- │    useWorkspace.js            guest (localStorage) or signed-in (Supabase) data, optimistic updates, realtime
- │    workspaceReducer.js        pure state transitions (unit-tested)
- ├─ src/data/
- │    cloudRepo.js               every Supabase query and RPC in one place
- │    mappers.js                 app objects <-> database rows (money is integer cents on both sides)
- └─ src/lib/                     pure, unit-tested logic: splits, people, backup, csv, storage, currency, activity
-          │  HTTPS (anon key + user JWT)          ▲ Realtime (websocket, RLS-filtered)
-          ▼                                       │
-Supabase (Auth, Postgres, Realtime, Storage)
- ├─ tables: profiles, groups, group_members, group_people, group_invitations, expenses, payments, saved_splits,
- │          activity_log, invitation_updates (one timestamp per account, for live invitation refreshes), plus internal
- │          username and rate-limit tables that no client can read or write
- ├─ Row Level Security on every table (members only)
- ├─ triggers: validate expenses/payments, block removing people with open balances, write the activity log
- ├─ functions: set_username, check_username, create_group, add_me_to_group, find_invitee, add_person_by_username,
- │             invite_by_username, accept/decline/revoke_invitation, keep_person_as_guest, list_my_invitations,
- │             list_group_people, list_group_members, remove_member, import_group, group_balances,
- │             account_deletion_blockers; trigger prepare_account_deletion() on auth.users
- ├─ Storage: public `avatars` bucket; each user can write and list only their own folder
- └─ Edge Function `delete-account` (supabase/functions/): the only place an account can be deleted
+Owner types @priya ─► add_person_by_username()  ── one transaction ──► person row + pending invitation
+                                                                      └► signal row for Priya changes
+Priya's app (Realtime) ─► re-reads list_my_invitations() ─► bell shows "Owner invited you to join Goa trip"
+Priya clicks Accept ─► accept_invitation() ── checks it is hers, pending, not expired ──► links her account to
+                                                                                         that person + membership
+Every later change ─► trigger writes activity_log ─► Realtime delivers it only to members ─► their screens refresh
 ```
 
 ### Database design
@@ -157,121 +207,189 @@ Supabase (Auth, Postgres, Realtime, Storage)
 | Table | Purpose |
 |---|---|
 | `groups` | Name, currency, owner (`created_by`, locked after insert) |
-| `group_members` | Which **accounts** can access a group (`owner` or `member`) |
-| `group_people` | The **names** in the split (friends do not need an account); unique per group, case-insensitive. `user_id` links a person to an account, set only by `create_group()` / `add_me_to_group()` (the owner themselves) or by accepting an invitation |
-| `group_invitations` | Pending and answered invitations (group, person, invitee account, status, expiry, `cleared_at` for "keep as guest"); reachable only through functions |
-| `invitation_updates` | One timestamp per account, bumped when an invitation to them (or in a group they own) changes; each account can read only its own row; the app listens to it on its one realtime channel |
+| `group_members` | Which **accounts** can open a group (`owner` or `member`) |
+| `group_people` | The **names** in the split (people do not need an account); unique per group, ignoring case. `user_id` links a person to an account, set only by the owner linking themselves or by accepting an invitation |
 | `expenses` | Amount in `bigint` cents, payer, split type, per-person shares (`{name: cents}`) |
 | `payments` | Repayments between two different people, in cents |
-| `saved_splits` | Read-only snapshots, stored as JSON documents |
+| `saved_splits` | Read-only settle-up snapshots |
 | `activity_log` | Who did what, written only by triggers |
-| `profiles` | Each account's name, preferences and unique `@username`; readable and writable only by its owner. The username changes only through `set_username()`; `avatar_url` may only point at the owner's own photo |
+| `group_invitations` | Pending and answered invitations (group, person, invited account, status, expiry); reachable only through functions |
+| `friendships` | One row per pair of accounts: `pending`, `accepted` or `declined`; reachable only through functions |
+| `invitation_updates` | One timestamp per account, bumped when an invitation or friend request involving it changes; the app listens to its own row to refresh |
+| `profiles` | Each account's display name, unique @username, photo link, preferences and `deletion_requested_at` (set while the account waits to be deleted) |
 
-### Security model (enforced by Postgres, tested in `supabase/tests/`)
+### Who may do what (enforced by Postgres, tested in `supabase/tests/`)
 
 | Action | Who is allowed |
 |---|---|
-| Read a group and its expenses, payments, people, log | Members of that group |
-| Add or edit expenses, payments, people | Members |
-| Rename a group or change its currency; delete a group | Its owner |
-| Look up an exact @username, add a person by username (which invites them), resend, revoke, keep as guest, remove members | Its owner |
-| Add guests (names only) | Members |
-| Add or link themselves as a person; take their own person out of the expenses when settled | The owner (for themselves only) |
-| See each person's status | Members; invitation details (who it is for) only the owner |
-| Accept or decline an invitation | Only the account it was sent to |
-| Link an account to a person | Nobody directly: only by accepting an invitation for that person (or the owner linking themselves) |
-| Leave a group | Any member except the owner |
-| Write the activity log, add members directly | Nobody (triggers and security-definer functions only) |
-| Read or change a profile (name, username, preferences) | Only its owner; the username changes only through `set_username()` |
-| Upload, replace or delete a profile photo | Only its owner, in their own `avatars/<user id>/` folder |
-| Delete an account | Only that account, through the `delete-account` Edge Function, after a recent sign-in and typing its @username; refused while it owns a group other members use |
+| Read a group and its expenses, payments, people and log | Members of that group |
+| Add or edit expenses, payments and guests | Members |
+| Rename a group, change its currency, delete it | Its owner |
+| Add by username, resend, revoke, keep as guest, remove members | Its owner |
+| Accept or decline a group invitation | Only the account it was sent to |
+| Send a friend request; cancel your own request; remove a friend | The signed-in user, for themselves |
+| Accept or decline a friend request | Only the account it was sent to |
+| Link an account to a person | Nobody directly: only by accepting an invitation (or the owner linking themselves) |
+| Write the activity log, add members directly, read `friendships` or `group_invitations` | Nobody (triggers and functions only) |
+| Read or change a profile; upload a photo | Only its owner (photos only in their own folder) |
+| Switch an account off for deletion | Only that account, through `delete-account`, after a recent sign-in and typing its @username |
+| Restore a switched-off account | Only that account, within 7 days |
+| Delete an account for good | Only the scheduled `purge-deleted-accounts` job, after the 7 days |
 | Anything at all | Not anonymous visitors |
 
-### Security notes
+---
 
-- **No secrets in the repository or the browser.** The app uses only the public anon key. The `service_role` key is
-  used in exactly one place: inside the `delete-account` Edge Function, for the single `deleteUser` call, read from
-  the environment Supabase provides to every Edge Function. It is never in browser code, Vercel, this repository or the
-  tests. Everything else that function does (checks, photo removal) runs with the caller's own token, so Row Level
-  Security and Storage policies still apply. `scripts/check-secrets.mjs` runs in CI and fails on tokens, secret keys,
-  private keys or tracked `.env` files. The Google client secret and SMTP credentials live only in the Supabase
-  dashboard.
-- **Sign-in:** PKCE flow with one `/auth/callback` route; codes and tokens are removed from the address bar at once.
-  Passwords need 12+ characters with mixed character types (set in Supabase Auth).
-- **Privacy:** members see each other's display names and @usernames, never email addresses.
-- **Abuse limits** (database-side): 60 username checks per 10 minutes, 30 username look-ups (to add someone) per 10
-  minutes, 10 username changes per hour and 30 invitations per hour per account, at most 20 pending invitations per
-  group. Look-ups are exact-match only: usernames cannot be listed or searched.
-- **Photos:** checked by their bytes, re-encoded to a 512 x 512 JPEG in the browser (removing EXIF and GPS), stored
-  under a random name; the bucket accepts only JPEG up to 1 MB.
+## Engineering decisions
+
+- **Money is integer cents everywhere.** In the app, in backups and in `bigint` columns. Splits use the
+  largest-remainder method, so shares always add up exactly. Decimals exist only for display.
+- **Validation lives in the database as well as the UI.** A trigger rejects an expense whose shares do not add up to
+  the total, whose payer or participants are not in the group, or whose shares are not whole cents. The UI checks
+  first so the message is friendly; the database is the guarantee, even for a hand-made API call.
+- **The SQL and JavaScript balance maths are tested against each other.** `group_balances()` in SQL is compared with
+  `computeBalances()` in JavaScript on randomly generated groups.
+- **One row per change.** An early version stored each group as one JSON document, so two people editing at once
+  overwrote each other. Now every expense, payment and person is its own row, so edits to different expenses never
+  conflict.
+- **Optimistic updates with honest rollback.** The screen updates immediately. If the database rejects the write, the
+  user sees why and the group is re-read from the server.
+- **Multi-step actions are single transactions.** Adding someone by username creates the person and the invitation
+  together (or neither). Accepting an invitation links the account and creates the membership together.
+- **One realtime channel.** Every change writes an activity row, and Realtime only delivers rows the user may read, so
+  one subscription covers expenses, payments, people, members and renames. Invitations and friend requests reach
+  someone who is not a member yet through their own `invitation_updates` row, which holds only a timestamp.
+- **The bell is only for decisions.** It lists what needs an answer, and its count only goes down when something is
+  answered. History lives on its own Recent Activities page, so nothing is shown twice.
+- **Friendship needs consent.** A request is not a friendship until it is accepted, a decline blocks repeat requests
+  for 7 days, and friend requests are rate limited.
+- **Deletion is reversible for 7 days.** The account is switched off at once (so it disappears for everyone else
+  immediately) but kept, so a mistake or a stolen session can be undone. Only a scheduled server job, protected by a
+  secret, deletes it for good.
+- **Guest mode by design.** With no session, data stays in `localStorage` and the database is never called. The
+  database refuses anonymous requests anyway (every policy is written `to authenticated`).
+- **Code splitting.** Pages and dialogs load on demand; React and Supabase are separate long-cached files.
+
+---
+
+## Security
+
+- **No secrets in the repository or the browser.** The app uses only Supabase's public key; access is decided by Row
+  Level Security. The `service_role` (admin) key exists only inside the two Edge Functions, read from the environment
+  Supabase provides. The daily purge function also requires a `CRON_SECRET` header, so nobody else can trigger it.
+  `scripts/check-secrets.mjs` runs in CI and fails on anything that looks like a key or a tracked `.env` file.
+- **Sign-in:** PKCE flow with a single `/auth/callback` route, and codes are removed from the address bar at once.
+  Passwords need 12+ characters with mixed character types.
+- **Sensitive actions need a fresh sign-in.** Deleting an account requires a sign-in from the last 15 minutes and
+  typing your own @username.
+- **Privacy:** members, friends and people who look you up see your display name, @username and photo, never your
+  email address. Usernames can only be looked up by exact match, never listed or searched.
+- **Abuse limits (in the database):** username checks, look-ups, changes, group invitations and friend requests are
+  rate limited per account; a group can have at most 20 pending invitations; a user at most 50 pending friend requests.
+- **Photos:** checked by their bytes, re-encoded to a 512 x 512 JPEG in the browser (removing EXIF and GPS data) and
+  stored under a random name. The bucket accepts only small JPEGs.
 - **Browser hardening:** `vercel.json` sends a Content-Security-Policy (only this site, Google Fonts and
   `*.supabase.co`), `X-Frame-Options: DENY`, `nosniff`, a strict referrer policy and a restrictive permissions policy.
-- Every schema change ships with a migration and, since usernames, a tested rollback script in `supabase/rollbacks/`.
+- **Every schema change has a migration and a tested rollback script** (`supabase/migrations/`,
+  `supabase/rollbacks/`).
 
-### Key decisions
+---
 
-- **Validation lives in the database as well as the UI.** A trigger rejects an expense whose shares do not add up
-  to the total, whose payer or participants are not in the group, or whose shares are not whole cents (including when a guest group is imported into an account). The UI checks
-  first for a friendly message; the database is the guarantee, even for a hand-crafted API call.
-- **One row per expense.** v1 stored each group as one JSON blob, so two people editing the same group overwrote each
-  other. v2 writes one row per change, so simultaneous edits to different expenses never conflict.
-- **Optimistic updates with honest rollback.** The screen updates immediately; if the database rejects the write, the
-  user sees why and the group is re-read from the server.
-- **One realtime channel.** Every change writes an activity row, and Realtime only delivers rows the user may read,
-  so listening to `activity_log` covers expenses, payments, people, members and renames. The bell reuses that same
-  channel and log: rows are merged by id, so a reload and a live update never show twice, and it lists only groups the
-  user can open now. An invitee is not a member yet, so invitations come through the same channel differently: the
-  user's own `invitation_updates` row (a timestamp, nothing else) changes and the app re-reads `list_my_invitations()`.
-  `group_invitations` itself stays closed to clients.
-- **Unread is per device.** The bell remembers the newest activity id and the pending invitations you have seen in
-  `localStorage` (and follows other tabs). It is never written to Supabase, so each browser has its own count. There
-  are no push, email or browser notifications.
-- **The creator is added by `create_group()`, not by a trigger.** Groups imported from a device, made by an older app
-  version or before this change are never altered: their owner gets a gentle "Add yourself" (or "I am already in the
-  list", which links an existing guest) instead, so no historic balance changes by surprise.
-- **Adding by username is one transaction.** `add_person_by_username()` creates the person and the invitation together
-  (or neither), picks a free name if theirs is taken ("Ben (@ben_k)"), and refuses duplicates, recent declines and
-  earlier unresolved invitations with a message that says what to do instead.
-- **The SQL and JavaScript balance maths agree.** `group_balances()` in SQL is property-tested against
-  `computeBalances()` in JavaScript on random groups.
-- **Code splitting.** Pages and dialogs load on demand; React and Supabase are separate long-cached chunks.
+## Error handling
+
+- **Invalid input:** splits that do not add up, duplicate or over-long names, paying yourself, bad usernames and
+  malformed money amounts are refused with a clear message, and the database refuses them again if the UI is bypassed.
+- **Failed network requests and database errors:** mapped to plain-language messages (`src/lib/errors.js`). A failed
+  write rolls the screen back to what the server has.
+- **Unauthorised actions:** buttons are hidden for actions the user may not take, and the database refuses them anyway
+  with a message the app shows.
+- **Missing resources:** unknown pages and deleted groups show a 404 page with a way back; an error boundary prevents
+  a blank screen.
+- **Duplicate operations:** inviting someone twice, re-sending a friend request, or answering something already
+  answered each get a specific explanation. Accepting an invitation is safe to retry.
+- **Expired or withdrawn items:** expired or revoked invitations, expired email codes and sign-in links, and a
+  cancelled Google sign-in each get their own message.
+- **Uploads and files:** unsupported or oversized photos are refused before upload. Damaged or hand-edited backup
+  files are checked, and skipped items are reported.
+- **Realtime down:** the app keeps working and refreshes when the tab becomes visible again.
+- **Loading, empty, success and error states** exist on every list and dialog.
+
+---
+
+## Testing
+
+| Suite | What it covers | Command |
+|---|---|---|
+| Unit | Split, balance and settlement maths (exact cents, random property tests), money input parsing, name and username rules, CSV escaping, backup and storage checks, reducer transitions, photo checks, sign-in redirects | `npm run test:unit` |
+| App (jsdom) | Real screens with a mocked data layer: routing and group addresses, adding people and expenses, the settle-up summary, sign-in screens, Settings, the participants list, invitations and friend requests in the bell, Recent Activities, onboarding and empty states, account deletion and restoring | `npm run test:unit` |
+| Database (PGlite) | The real SQL migrations running in Postgres compiled to WebAssembly, acting as different users: Row Level Security isolation, anonymous access denied, validation triggers, sharing rules, invitations, friend requests, the 7-day deletion window, account deletion cleanup, Storage policies, rate limits, rollback scripts, SQL balances equal JavaScript balances; plus both Edge Functions with fake clients | `npm run test:db` |
+| Browser (Playwright) | The production build in Chromium on desktop and phone sizes: the full guest flow, persistence after reload, every URL, money input rules, photo handling, keyboard use, policy pages, no console errors, no sideways scrolling | `npm run test:e2e` |
+
+CI (`.github/workflows/ci.yml`) runs the secret scan, lint, the unit and database tests, the build and the Playwright
+browser tests on every pull request and push to `main`. Not automated: real email delivery, Supabase Realtime itself, and the deployed Edge Functions, which
+are checked by hand with the [checklist](#4-check-the-live-app) below.
+
+---
 
 ## Local setup
 
 Requires Node 20.19+ or 22.12+.
 
 ```bash
+git clone https://github.com/parthgupta-5/expense-splitter.git
+cd expense-splitter
 npm install
 cp .env.example .env      # optional: without it the app runs in guest mode only
 npm run dev               # http://localhost:5173
-npm test                  # unit, component, app and database tests
-npm run test:unit         # only the tests in src/ (as in CI)
-npm run test:db           # only the database tests (real migrations in PGlite; no Supabase project needed)
+```
+
+Other commands:
+
+```bash
+npm test                  # every Vitest suite (unit, app, database)
+npm run test:unit         # only the tests in src/
+npm run test:db           # only the database tests (no Supabase project needed)
 npm run test:e2e          # browser tests (first time: npx playwright install chromium)
 npm run lint
 npm run build             # production build in dist/
-npm run check:secrets     # fails if a tracked file looks like it contains a secret
-npm run preflight         # lint + tests + build + secret scan + placeholder check (run before pushing)
+npm run preflight         # lint + tests + build + secret scan, run before pushing
 ```
+
+---
 
 ## Environment variables
 
-| Variable | Where | Secret? |
+**Browser app** (Vercel and `.env`). Both are public by design; Row Level Security enforces access.
+
+| Variable | Value |
+|---|---|
+| `VITE_SUPABASE_URL` | The bare project URL, `https://<project-ref>.supabase.co` (not the `/rest/v1/` address) |
+| `VITE_SUPABASE_ANON_KEY` | The project's anon / publishable key |
+
+**Edge Functions** (Supabase only, never in Vercel, `.env` or the repository).
+
+| Variable | Set by | Used by |
 |---|---|---|
-| `VITE_SUPABASE_URL` | Vercel and `.env` | No. Use the bare project URL `https://<ref>.supabase.co`, not `.../rest/v1/` |
-| `VITE_SUPABASE_ANON_KEY` | Vercel and `.env` | No (public; Row Level Security enforces access) |
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` | Supabase, automatically | Both functions |
+| `CRON_SECRET` | You (a long random string, e.g. `openssl rand -hex 32`) | `purge-deleted-accounts` |
+| `ALLOWED_ORIGINS` (optional) | You | `delete-account`, to limit which sites may call it |
 
-The `delete-account` Edge Function reads `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY`, which
-Supabase provides to Edge Functions automatically (optional: `ALLOWED_ORIGINS`). Never put the `service_role` key in
-Vercel, `.env`, any `VITE_*` variable or this repository. `.env` is git-ignored.
-Vite bakes `VITE_*` values in at build time, so redeploy after changing them.
+`.env` is git-ignored. Vite builds `VITE_*` values into the app, so redeploy after changing them, and never put the
+`service_role` key in a `VITE_*` variable.
 
-## Deployment (GitHub, Supabase, Vercel)
+---
 
-### 1. Supabase
+## Deployment
 
-1. Create a project at supabase.com.
-2. SQL Editor: run these files **in this order** (each is safe to re-run):
+The live app runs on **Vercel** (frontend) and **Supabase** (database, sign-in, functions):
+https://expense-splitter-two-liart.vercel.app/
+
+To deploy your own copy from scratch:
+
+### 1. Supabase project and database
+
+1. Create a project at [supabase.com](https://supabase.com).
+2. **SQL Editor:** run these files **in this order**. Each one is safe to run again, so an existing project can
+   simply run the whole list.
    1. `supabase/migrations/2026102201_expense_splitter_core.sql`
    2. `supabase/migrations/2026102601_harden_groups.sql`
    3. `supabase/migrations/2026102701_normalize_and_share.sql`
@@ -280,204 +398,110 @@ Vite bakes `VITE_*` values in at build time, so redeploy after changing them.
    6. `supabase/migrations/2026103001_avatar_storage.sql`
    7. `supabase/migrations/2026103101_username_invitations.sql`
    8. `supabase/migrations/2026110101_people_invites_account_deletion.sql`
-3. Project Settings → API: copy the **Project URL** and the **anon / publishable key**.
-4. Authentication → Sign In / Providers → Email: enable **Email**, turn **Confirm email** on (User Signups), set
-   **Email OTP length** to 6, **Minimum password length** to 12 and **Password requirements** to lowercase,
-   uppercase, digits and symbols. Sign-up and password reset use 6-digit codes: put `{{ .Token }}` in the **Confirm
-   signup** and **Reset password** email templates (editing templates needs custom SMTP, e.g. Brevo or Resend).
-5. Authentication → Providers → Google (optional): enable it with the Client ID and Client Secret of a Google Cloud
-   OAuth *Web application* client. Its authorized redirect URI is `https://<project-ref>.supabase.co/auth/v1/callback`
-   and its authorized JavaScript origins are the Vercel URL and `http://localhost:5173`. The secret stays in Supabase.
-6. Authentication → URL Configuration: set **Site URL** to the Vercel URL and add
-   `https://<your-app>.vercel.app/auth/callback` and `http://localhost:5173/auth/callback` to **Redirect URLs**
-   (every email link and the Google sign-in return there).
+   9. `supabase/migrations/2026110201_friends_and_account_recovery.sql`
+3. **Project Settings → API:** copy the Project URL and the anon / publishable key.
+4. **Authentication → Providers → Email:** turn on **Confirm email**, set **Email OTP length** to 6, the minimum
+   password length to 12 and require lowercase, uppercase, digits and symbols. Put `{{ .Token }}` in the **Confirm
+   signup** and **Reset password** email templates (editing templates needs custom SMTP, such as Brevo or Resend).
+5. **Authentication → Providers → Google** (optional): add the Client ID and Secret of a Google Cloud OAuth *Web
+   application* client. Its redirect URI is `https://<project-ref>.supabase.co/auth/v1/callback`.
+6. **Authentication → URL Configuration:** set **Site URL** to the Vercel URL, and add
+   `https://<your-app>.vercel.app/auth/callback` and `http://localhost:5173/auth/callback` to **Redirect URLs**.
 
-**Adding usernames to an existing project:** run migration 5 *before* deploying the app version that uses it. It
-gives every existing account a provisional `user_xxxxxxxx` name, which the app asks its owner to replace at the next
-sign-in. The app already deployed keeps working against it. If it must be undone, run
-`supabase/rollbacks/2026102901_profiles_usernames.down.sql`; that keeps every username and never touches group data.
+### 2. Edge Functions and the daily job
 
-**Adding profile photos:** run migration 6 before deploying the app version that uses it. It creates the public
-`avatars` Storage bucket (JPEG only, 1 MB per file) and its policies: each photo is stored at
-`<user id>/<random uuid>.jpg`, only that signed-in user can create, change or delete objects in their own folder, and
-nobody can list anyone else's photos. Photos are checked by their bytes (JPG, PNG or WebP, at most 5 MB) and re-encoded in the
-browser to a 512 x 512 JPEG, which removes EXIF and GPS metadata. Undo with
-`supabase/rollbacks/2026103001_avatar_storage.down.sql`, which stops serving photos without deleting any.
+1. Deploy both functions with the Supabase CLI:
+   ```bash
+   npx supabase login
+   npx supabase functions deploy delete-account --project-ref <project-ref>
+   npx supabase functions deploy purge-deleted-accounts --no-verify-jwt --project-ref <project-ref>
+   ```
+   (Or Dashboard → Edge Functions → Deploy a new function, pasting each function's `handler.js` and `index.ts`.)
+2. Add the secret the purge job needs:
+   `npx supabase secrets set CRON_SECRET=<a long random string> --project-ref <project-ref>`
+   (or Dashboard → Edge Functions → Secrets).
+3. Schedule the purge once a day. Turn on the **pg_cron** and **pg_net** extensions (Database → Extensions), then run
+   this in the SQL Editor:
+   ```sql
+   select cron.schedule('purge-deleted-accounts', '15 3 * * *', $$
+     select net.http_post(
+       url := 'https://<project-ref>.supabase.co/functions/v1/purge-deleted-accounts',
+       headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron-secret', '<your CRON_SECRET>'),
+       body := '{}'::jsonb
+     );
+   $$);
+   ```
+4. Check it: `curl -X POST https://<project-ref>.supabase.co/functions/v1/purge-deleted-accounts -H "x-cron-secret: <your CRON_SECRET>"`
+   should answer `{"deleted":0,"failed":[]}`.
+5. If `delete-account` answers `401 Invalid JWT` for signed-in users, redeploy it with `--no-verify-jwt`; the function
+   still checks the user's token itself.
 
-**Username invitations:** run migration 7 before deploying the app version that uses it. Invitations replace adding
-members by email (the old function now refuses with a message, and member lists no longer include emails). An owner
-invites an account by @username to be one specific person in the group; accepting links that account to that person
-and adds it as a member in one transaction. Invitations expire after 30 days, a declined person cannot be offered to the
-same account again for 7 days, and a group can have at most 20 pending invitations. Only the owner can rename a group
-or change its currency. Existing members keep their access. Undo with
-`supabase/rollbacks/2026103101_username_invitations.down.sql` (keeps every invitation and link).
+### 3. Vercel
 
-**People, invitations in the bell and account deletion:** run migration 8 *before* deploying the app version that
-uses it (the new app creates groups with `create_group()`). It changes no existing group, person, expense or balance.
-It adds the functions above, the `invitation_updates` table (added to the Realtime publication), an owner exception to
-the linked-person rule, and the account-deletion trigger on `auth.users`. It also fixes two existing problems with
-deleting a user: expenses kept the deleted account's id, and a user who had recorded a payment could not be deleted.
-Undo with `supabase/rollbacks/2026110101_people_invites_account_deletion.down.sql` (deploy the previous app first; it
-keeps every person, link and invitation). Then deploy the `delete-account` Edge Function (below).
-
-**Upgrading an existing v1 project:** run migrations 3 and 4. It moves every group's old JSON data into the new
-tables inside one transaction, then drops the old column. Migration 4 makes group import enforce the same
-"shares add up to the total" rule as normal writes. The database tests include this upgrade path.
-
-### Account deletion (Edge Function)
-
-The browser never deletes an account. `supabase/functions/delete-account/` (`index.ts` + `handler.js`) does, in this
-order: checks the caller's token with Supabase Auth; requires a sign-in from the last 15 minutes (from the token's
-`amr` claim); requires the caller's own @username typed; refuses (409) while they own a group other members use;
-clears the profile photo and deletes every object in their own `avatars/<id>/` folder **with the caller's own token**;
-then deletes the user with the admin key. The database trigger `prepare_account_deletion()` runs in that same
-transaction. Success is reported only after the final step succeeds; any earlier failure deletes nothing else.
-
-Deploy it by hand (nothing in this repository deploys it):
-
-1. Supabase CLI (`npx supabase` works): `npx supabase login`, then
-   `npx supabase functions deploy delete-account --project-ref <project-ref>`.
-   Or Dashboard → Edge Functions → Deploy a new function → name it `delete-account` and paste `handler.js` and
-   `index.ts` as two files.
-2. Secrets: none to add. Supabase provides `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` to
-   every Edge Function. Optional: `npx supabase secrets set ALLOWED_ORIGINS=https://<your-app>.vercel.app,http://localhost:5173`
-   to limit CORS to the app (otherwise any origin may call it, which is safe because it needs the user's own token).
-3. If calls fail with `401 Invalid JWT` while signed in (projects using the newer JWT signing keys), redeploy with
-   `--no-verify-jwt`; the function still verifies the token itself with Supabase Auth.
-4. No Vercel, Auth URL or SMTP change is needed. If you delete a user from Dashboard → Authentication, the same
-   trigger runs: it refuses while that user owns a group other members use.
-
-### Account deletion and data retention
-
-- **Blocked** while the account owns a group that other members use: the owner deletes that group first (there is no
-  ownership transfer yet). The dialog lists and links those groups.
-- **Deleted at once:** the Supabase Auth user (email, password, Google identity, sessions); the profile (display name,
-  @username, photo link, preferences, saved people) and the photo files; groups only they use, with everything in
-  them; their memberships elsewhere; invitations to them; their username hold, rate-limit counters and
-  `invitation_updates` row.
-- **Kept in other people's groups:** the person they appeared as (expenses and balances refer to it by name) and the
-  expenses, payments and snapshots recorded there, unlinked (`created_by` and `user_id` become null). Activity
-  history keeps the events but shows "Former member" and drops their account id.
-- **Afterwards:** their @username can be chosen by someone else. The app keeps no separate backups; Supabase's and
-  Vercel's own backups and logs follow their policies (no specific period is claimed). This matches `/privacy`.
-
-### 2. Vercel
-
-1. Add New → Project, import the GitHub repo (framework preset **Vite**).
+1. Add New → Project, import the GitHub repository (framework preset **Vite**).
 2. Environment Variables (Production, Preview, Development): `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
-3. Deploy. `vercel.json` rewrites all paths to `index.html` (so `/groups/<id>` survives a refresh), sets security
-   headers including a Content-Security-Policy that allows only this site, Google Fonts and `*.supabase.co`
-   (HTTPS and WebSocket for Realtime), and caches hashed assets for a year.
+3. Deploy. `vercel.json` sends every path to `index.html` (so `/groups/goa-trip` survives a refresh), sets the
+   security headers, and caches hashed files for a year.
 
-### 3. Verify the live app (two browsers)
+### 4. Check the live app
 
-- [ ] As a guest: create a group, add people, add an expense of each split type; balances and the plan are correct.
+Use two browsers with two accounts.
+
+- [ ] As a guest: create a group, add people and an expense of each split type; balances and the plan are correct.
 - [ ] Sign up; the "Keep the groups from this device?" dialog moves the guest group into the account.
-- [ ] Invite a second account by its @username as one of the group's people; it accepts from its Groups page, the
-      group appears, and an expense added there shows up in the first browser without a reload.
-- [ ] The second account cannot invite people, rename the group, change its currency or delete it, and can leave.
-- [ ] With the first browser's bell panel closed, add an expense in the second: a dot appears on the first browser's
-      bell; opening it lists the expense at the top, clears the dot, and clicking it opens that group.
-- [ ] Password reset emails a 6-digit code that leads to the new-password page; refreshing any page does not 404.
-- [ ] Create a group while signed in: you appear in Participants, Who paid and Split between straight away.
-- [ ] Add people → Add by username: the second account's bell shows "… invited you to join …" with a count; the owner
-      can include them in an expense before they accept; accepting from the bell opens the group, and Participants shows
-      them as a Member (no duplicate person). Decline/revoke updates both browsers without a reload.
-- [ ] Settings → Delete account on a throwaway account: blocked while it owns a shared group; after deleting that
-      group (and signing in again if asked), it is deleted, signed out, and its photo URL no longer loads.
-- [ ] `/privacy` and `/terms` open without signing in.
-- [ ] No console errors (including Content-Security-Policy violations).
+- [ ] Send a friend request; the other account's bell shows it with a count, and accepting makes you friends.
+- [ ] Friends → Add to group; the friend's bell shows the group invitation; accepting opens the group.
+- [ ] An expense added in one browser appears in the other without a reload, and in Recent Activities.
+- [ ] The second account cannot rename, delete or invite people to the owner's group, and can leave it.
+- [ ] Password reset emails a 6-digit code; refreshing any page does not show a 404.
+- [ ] Settings → Delete account on a throwaway account: it is signed out; signing in shows the restore screen;
+      Restore brings everything back.
+- [ ] `/privacy` and `/terms` open without signing in. No errors in the browser console.
 
-### Troubleshooting
+---
 
-| Symptom | Cause / fix |
-|---|---|
-| Sign-in fails with a 404 or "Invalid path" | `VITE_SUPABASE_URL` ends in `/rest/v1/`; use the bare project URL (the app also trims it) |
-| Only guest mode is offered | Env vars missing at build time: add them in Vercel, redeploy |
-| `relation "public.expenses" does not exist` | Migration 3 has not been run |
-| "No account has that username" | The friend must sign up and choose their @username first |
-| Changes from others appear only after switching tabs | Realtime blocked (check CSP `wss://*.supabase.co`) or the Realtime service is paused |
-| The bell's panel says "Live updates are unavailable" | Same as above; the panel still shows recent history and re-reads it when opened |
-| Email links open localhost | Supabase Site URL / Redirect URLs still point to localhost |
+## Known limitations
 
-## Testing
-
-| Suite | What it proves | Command |
-|---|---|---|
-| Unit (Vitest) | Split, balance and settlement maths (exact cents, random property tests), balances and the settle-up summary in words, money input parsing, name and username rules, removed people in old expenses, email masking, CSV escaping, backup and storage sanitising, cents mapping, reducer transitions, photo checks, sign-in redirects, activity text | `npm run test:unit` |
-| Hook (Vitest + mocked API) | Optimistic updates, rollback with an error message when the server rejects a write, live refresh, guest-to-account import, account data never written to the device | `npm run test:unit` |
-| App (Vitest + jsdom) | Routing and readable group addresses, adding people and an expense from the Add expense dialog, the group summary and settlement in words, refusing to edit an old expense that names a removed person, 404 pages, sign-in and code screens, Settings (section menu and focus, account rows, masked email, theme) and photo upload, the participants list (creator added on create, add by username with safe look-up results, add guest, resend, revoke, keep as guest, add yourself), invitations on the Groups page and in the bell (count, accept, decline, stale removal, other tabs), activity (live updates without duplicates, access filtering, keyboard), onboarding and empty states, policy pages and links, account deletion (blocked, confirmed, re-sign-in, failure) | `npm run test:unit` |
-| Database (PGlite) | The real migrations: RLS isolation between users (and RLS on every table), anonymous access denied, validation triggers, sharing rules, activity log, usernames and rate limits, invitations, people and add-by-username, invitation signals, account deletion (blocking, cleanup, shared history), avatar Storage policies, rollback scripts, upgrades of existing data, SQL balances equal JS balances, removing a settled person keeps old expenses and balances unchanged; plus the `delete-account` Edge Function's handler with fake clients | `npm run test:db` |
-| Browser (Playwright) | Production build in Chromium on desktop and a phone viewport: full guest flow, persistence after reload, per-group currency, every URL loads, money input rules, sign-in address cleanup and sign-up form, photo re-encoding and refusals, guests see no sharing or bell, welcome and dismissal, the Add people dialog by keyboard, the Add expense dialog, Settings section menu by keyboard and theme, policy pages and footer links, empty states, no console errors, no sideways scrolling | `npm run test:e2e` |
-
-476 Vitest test cases (358 unit, hook, app and rollback-compatibility tests in `src`; 118 database and Edge Function
-tests) plus 20 Playwright scenarios, each run on a desktop and a phone viewport (40 browser runs). What is **not**
-automated: real email delivery, Supabase Realtime itself, signed-in flows in a real browser (the browser tests run
-without a Supabase project) and the deployed Edge Function (checked by hand with the checklist above).
-
-## Error handling
-
-Invalid or inconsistent splits, duplicate or over-long names and same-person repayments are rejected with a message,
-and the database rejects them again if the UI is bypassed. Failed cloud writes show a friendly reason and the
-affected group is re-read so the screen matches the server. Network, permission and validation errors are mapped to
-plain-language messages (`src/lib/errors.js`). Malformed, oversized or hand-edited backup files and storage are
-sanitised and skipped items are reported. Unknown pages and deleted groups show a 404 page; an error boundary
-prevents a blank screen. Wrong or expired email codes, an expired sign-in link and a cancelled Google sign-in each get
-a specific message. Unsupported or oversized photos are refused before upload. An invitation that has expired or was
-revoked shows the database's reason and nothing changes. The activity bell has loading, empty, error-with-Retry and
-"live updates unavailable" states, and still shows recent history when Realtime is down.
-
-## Known limitations and deferred work
-
-- **Adding by username needs an existing account with a chosen @username.** There are no invitation emails; the friend
-  signs up first (or is added as a guest meanwhile). Looking up a username shows that account's display name and photo
-  to a group owner (exact match only, rate limited).
+- **Adding by username needs an existing account.** There are no invitation emails: a friend signs up first, or is
+  added as a guest meanwhile.
 - **No ownership transfer.** An owner whose group other members use must delete that group before deleting their
   account.
-- **People are referenced by name in expenses.** A settled person can be removed while old expenses still name them.
-  The app refuses to edit such an expense, and the database refuses to save one that names someone not in the group,
-  but deleting such an old expense or payment is still allowed and can leave the removed person with a balance that
-  cannot be settled until they are added back. A database-level rule for this is not built yet.
-- **A deleted account's @username is free at once**, and its name stays as a person in other people's groups (their
-  expenses refer to it).
-- **Same-expense edits are last-writer-wins.** Two members editing the *same* expense at the same moment: the later
+- **People are referenced by name in expenses.** Deleting an old expense or payment that names a removed person can
+  leave that person with a balance until they are added back.
+- **Same-expense edits are last-writer-wins.** If two members edit the *same* expense at the same moment, the later
   save wins. Different expenses never conflict.
-- **The bell's count is per device.** Opening the panel on your phone does not clear the count on your laptop (other
-  tabs of the same browser do follow), and it shows the latest 30 activity entries (the History page shows more).
-- **Signed-in changes need a connection.** Offline writes are rejected with a message rather than queued.
-- **No currency conversion.** Each group has one currency; it changes the symbol and format only.
+- **A switched-off account is locked by the app, not by every database rule.** It cannot be found, invited or
+  befriended (enforced by the database), and the app shows only the restore screen. Its group memberships stay until
+  the final deletion so a restore can bring them back, which means its owner could still reach those groups by calling
+  the API directly during the 7 days.
+- **Signed-in changes need a connection.** Offline writes are refused with a message rather than queued.
+- **No currency conversion.** Each group has one currency.
 - **Guest data lives only in the browser** until it is moved into an account or backed up.
+- **No notifications outside the app** (no push or email notifications).
 - Free-tier Supabase projects pause after a period of inactivity.
-- **No notifications outside the app.** There are no push, email or browser notifications; the bell is in-app only.
 
-Consciously deferred (not built yet):
-
-- **Removing the retired email-invitation functions.** `invite_member()` now refuses with a message and
-  `list_members()` returns no emails; both are kept only so an older deployed app fails politely. A later migration
-  can drop them.
+---
 
 ## Project history
 
-- **v1.x:** React app with guest mode and per-user cloud sync of whole groups as JSON; tests for the money logic; CI.
-- **v2.0:** normalised database (one row per expense/payment/person), group sharing with roles, server-side
-  validation and activity log, Realtime updates, per-group currency, React Router URLs, context-based state instead
-  of prop drilling, password reset, code splitting, ESLint, database and browser test suites. Two v1 bugs were found
-  and fixed along the way: a Supabase URL ending in `/rest/v1/` (as in the local `.env`) sent every auth request to a
-  wrong address, and the `groups` read policy rejected `insert ... returning` for a brand-new group, which is what
-  v1's sync call did (reproduced in the database tests).
-- **After v2.0 (pull requests #2 to #7):** exact two-decimal money inputs; unique @usernames; email codes, Google
-  sign-in and change password; readable group addresses (`/groups/goa-trip`); profile photo uploads; invitations by
-  @username with accept and decline; the activity bell.
-- **People, notifications and privacy:** the creator is a person from the start; Add people (by username, which also
-  invites, or as a guest) with clear statuses and next steps; invitations in the bell; first-time welcome and empty
-  states; Privacy Policy and Terms; account deletion through an Edge Function with a documented retention policy.
+- **v1:** React app with guest mode and per-user cloud sync of whole groups as JSON; tests for the money logic; CI.
+- **v2:** normalised database (one row per expense, payment and person), group sharing with roles, server-side
+  validation and activity log, Realtime updates, per-group currency, real URLs, password reset, code splitting, and
+  database and browser test suites. Two v1 bugs were found and fixed along the way (a wrong Supabase URL format that
+  broke sign-in, and a read policy that rejected creating a brand-new group).
+- **Accounts and sharing:** unique @usernames, email codes, Google sign-in, profile photos, invitations by @username
+  with accept and decline, the creator as a participant from the start, guests and clear person statuses.
+- **Product clean-up:** a review found features shown twice and removed the duplication. The bell now holds only
+  what needs an answer, and history moved to its own Recent Activities page. A plain "saved names" list was replaced by
+  real **friends with requests**, and account deletion gained a **7-day restore window** with a scheduled final
+  deletion.
 
-## AI assistance
+## AI usage
 
-AI tools (Claude) were used for debugging, refactoring, the v2 restructuring, writing tests and documentation. The
-author reviewed the changes and is responsible for the final product.
+AI tools (Claude) were used for reviewing the product, debugging, refactoring, writing tests and documentation. Every
+change was reviewed by the author, who is responsible for the final product and its design decisions.
 
 ## Originality
 
-Built as an original project using open-source libraries (React, React Router, Ant Design, Supabase client, Vite).
-No existing application was forked.
+An original project built with open-source libraries (React, React Router, Ant Design, the Supabase client, Vite). No
+existing application or tutorial project was forked.

@@ -5,12 +5,13 @@ import { App as AntApp, ConfigProvider } from 'antd';
 import { readTheme, saveTheme } from '../lib/storage';
 import { buildTheme, requiredMark } from '../theme';
 import { useAuth } from './useAuth';
+import { useFriends } from './useFriends';
 import { useInvitations } from './useInvitations';
 import { useWorkspace } from './useWorkspace';
 
 const AppContext = createContext(null);
 
-/** Everything pages need: auth, workspace data and actions, invitations, notifications and app-level UI state. */
+/** Everything pages need: auth, workspace data and actions, invitations, friends, notifications and app-level UI state. */
 export function useApp() {
   const value = useContext(AppContext);
   if (!value) throw new Error('useApp must be used inside <AppProvider>');
@@ -21,9 +22,17 @@ function AppState({ children, dark, setDark }) {
   const { message, modal } = AntApp.useApp();
   const auth = useAuth();
   const workspace = useWorkspace({ user: auth.user, authReady: auth.ready, notify: message });
+  // A disabled account (waiting to be deleted) sees only the restore screen, so it loads no friends or invitations.
+  const disabled = Boolean(workspace.profile?.deletion_requested_at);
   const invitations = useInvitations({
     userId: auth.user?.id,
-    enabled: workspace.mode === 'cloud' && workspace.status === 'ready',
+    enabled: workspace.mode === 'cloud' && workspace.status === 'ready' && !disabled,
+    realtime: workspace.realtime,
+    onChange: workspace.actions.onInvitationsChange,
+  });
+  const friends = useFriends({
+    userId: auth.user?.id,
+    enabled: workspace.mode === 'cloud' && workspace.status === 'ready' && !disabled,
     realtime: workspace.realtime,
     onChange: workspace.actions.onInvitationsChange,
   });
@@ -38,6 +47,7 @@ function AppState({ children, dark, setDark }) {
     auth,
     workspace,
     invitations,
+    friends,
     notify: message,
     modal,
     dark,
@@ -49,7 +59,7 @@ function AppState({ children, dark, setDark }) {
     groupDialogOpen,
     openGroupDialog: () => setGroupDialogOpen(true),
     closeGroupDialog: () => setGroupDialogOpen(false),
-  }), [auth, workspace, invitations, message, modal, dark, toggleDark, authDialog, openAuth, closeAuth, groupDialogOpen]);
+  }), [auth, workspace, invitations, friends, message, modal, dark, toggleDark, authDialog, openAuth, closeAuth, groupDialogOpen]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

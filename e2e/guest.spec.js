@@ -92,7 +92,7 @@ test('groups have their own currency and every page has a working URL', async ({
   await expect(page.getByRole('heading', { level: 1, name: 'New York trip' })).toBeVisible();
   await expect(page.locator('.group-subtitle')).toContainText('USD');
 
-  for (const [path, heading] of [['/history', 'Activity history'], ['/people', 'Saved people'], ['/settings', 'Settings'], ['/profile', 'Your account']]) {
+  for (const [path, heading] of [['/activity', 'Recent activities'], ['/friends', 'Friends'], ['/settings', 'Settings'], ['/profile', 'Your account']]) {
     await page.goto(path);
     await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
   }

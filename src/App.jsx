@@ -25,6 +25,7 @@ const UsernameDialog = lazy(lazyModules.UsernameDialog);
 const GroupsPage = lazy(lazyModules.GroupsPage);
 const HistoryPage = lazy(lazyModules.HistoryPage);
 const PeoplePage = lazy(lazyModules.PeoplePage);
+const RestoreAccountPage = lazy(lazyModules.RestoreAccountPage);
 const ProfilePage = lazy(lazyModules.ProfilePage);
 const SettingsPage = lazy(lazyModules.SettingsPage);
 const ResetPasswordPage = lazy(lazyModules.ResetPasswordPage);
@@ -91,7 +92,10 @@ export default function App() {
   // An account still on its provisional user_ name must choose a username before anything else (except finishing a
   // sign-in or a password reset).
   const LegalPage = LEGAL_PAGES[pathname];
-  const chooseUsername = workspace.mode === 'cloud' && workspace.status === 'ready' && !auth.recovering
+  // An account waiting to be deleted sees only the screen that restores it (or signs out).
+  const disabled = workspace.mode === 'cloud' && workspace.status === 'ready'
+    && Boolean(workspace.profile?.deletion_requested_at);
+  const chooseUsername = workspace.mode === 'cloud' && workspace.status === 'ready' && !auth.recovering && !disabled
     && pathname !== CALLBACK_PATH && !LegalPage && needsUsername(workspace.profile);
 
   // The password-reset email link signs the user in; send them to the page where they choose a new password.
@@ -119,6 +123,8 @@ export default function App() {
         action={<Button onClick={() => window.location.reload()}>Try again</Button>}
       />
     );
+  } else if (disabled) {
+    body = <Suspense fallback={loading}><RestoreAccountPage /></Suspense>;
   } else {
     body = (
       <Suspense fallback={loading}>
@@ -126,8 +132,10 @@ export default function App() {
           <Route path="/" element={<HomeRedirect />} />
           <Route path="/groups" element={<GroupsPage />} />
           <Route path="/groups/:groupId" element={<GroupRoute />} />
-          <Route path="/history" element={<HistoryPage />} />
-          <Route path="/people" element={<PeoplePage />} />
+          <Route path="/activity" element={<HistoryPage />} />
+          <Route path="/history" element={<Navigate replace to="/activity" />} />
+          <Route path="/friends" element={<PeoplePage />} />
+          <Route path="/people" element={<Navigate replace to="/friends" />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -140,14 +148,14 @@ export default function App() {
   return (
     <Layout className="app-layout">
       <a className="skip-link" href="#main">Skip to content</a>
-      <TopBar />
+      <TopBar disabled={disabled} />
       <Content className="content" id="main" tabIndex={-1}>{body}</Content>
       <AppFooter />
       <Suspense fallback={null}>
         {authDialog.open && <AuthModal />}
         {groupDialogOpen && <GroupModal />}
         {chooseUsername && <UsernameDialog open required />}
-        {workspace.guestToImport.length > 0 && !chooseUsername && <ImportGuestModal />}
+        {workspace.guestToImport.length > 0 && !chooseUsername && !disabled && <ImportGuestModal />}
       </Suspense>
     </Layout>
   );

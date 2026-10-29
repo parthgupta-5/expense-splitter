@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('./supabase', () => ({ supabase: null, supabaseConfigured: true, normalizeSupabaseUrl: () => '', supabaseUrl: '' }));
 vi.mock('./state/useAuth', () => ({ useAuth: () => mocks.auth }));
 vi.mock('./data/cloudRepo', () => ({
+  listFriends: vi.fn(() => Promise.resolve([])),
   fetchGroups: vi.fn(),
   fetchGroup: vi.fn(),
   fetchProfile: vi.fn(),

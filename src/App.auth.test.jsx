@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({ auth: {} }));
 vi.mock('./supabase', () => ({ supabase: null, supabaseConfigured: true, normalizeSupabaseUrl: () => '', supabaseUrl: '' }));
 vi.mock('./state/useAuth', () => ({ useAuth: () => mocks.auth }));
 vi.mock('./data/cloudRepo', () => ({
+  listFriends: vi.fn(() => Promise.resolve([])),
   fetchGroups: vi.fn(),
   fetchGroup: vi.fn(),
   fetchProfile: vi.fn(),
@@ -255,10 +256,10 @@ describe('forgotten password', () => {
 
 describe('/auth/callback', () => {
   it('exchanges the code once, clears it from the address bar and returns to the remembered page', async () => {
-    window.sessionStorage.setItem('expense-splitter-auth-return', '/history');
+    window.sessionStorage.setItem('expense-splitter-auth-return', '/activity');
     mocks.auth.exchangeCode.mockResolvedValue({ recovery: false });
     openUrl('/auth/callback?code=one-time-code-123&sb_flow_id=flow-1');
-    await waitFor(() => expect(window.location.pathname).toBe('/history'));
+    await waitFor(() => expect(window.location.pathname).toBe('/activity'));
     expect(mocks.auth.exchangeCode).toHaveBeenCalledTimes(1); // even with StrictMode's double effects
     expect(mocks.auth.exchangeCode).toHaveBeenCalledWith(expect.objectContaining({ code: 'one-time-code-123', flowId: 'flow-1' }));
     expect(window.location.href).not.toMatch(/one-time-code|flow-1/);
@@ -298,9 +299,9 @@ describe('/auth/callback', () => {
   it('moves on when there is nothing to finish', async () => {
     mocks.auth.user = { id: 'user-1', email: 'asha@example.com', user_metadata: {} };
     repo.fetchProfile.mockResolvedValue({ id: 'user-1', display_name: 'Asha', username: 'asha', username_confirmed_at: '2026-10-01' });
-    window.sessionStorage.setItem('expense-splitter-auth-return', '/people');
+    window.sessionStorage.setItem('expense-splitter-auth-return', '/friends');
     openUrl('/auth/callback');
-    await waitFor(() => expect(window.location.pathname).toBe('/people'));
+    await waitFor(() => expect(window.location.pathname).toBe('/friends'));
     expect(mocks.auth.exchangeCode).not.toHaveBeenCalled();
   });
 });

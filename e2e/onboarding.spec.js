@@ -81,8 +81,8 @@ test('the policies are public, linked from every page footer, and readable on a 
   await expect(page.getByRole('heading', { level: 1, name: 'Terms of Service' })).toBeVisible();
 });
 
-test('empty history explains what will appear and leads back to the groups', async ({ page }) => {
-  await page.goto('/history');
+test('empty recent activities explain what will appear and lead back to the groups', async ({ page }) => {
+  await page.goto('/activity');
   await expect(page.getByText(/No history yet\. Expenses, payments/)).toBeVisible();
   await page.getByRole('button', { name: 'Go to your groups' }).click();
   await expect(page).toHaveURL(/\/groups$/);
