@@ -371,7 +371,7 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 -- ---------------------------------------------------------------------------------------------------------------
--- 4. Privileges
+-- 4. Privileges (the server role keeps its default Supabase access to functions, so nothing is granted here)
 -- ---------------------------------------------------------------------------------------------------------------
 
 revoke execute on function public.is_account_active(uuid) from public, anon, authenticated;
@@ -391,13 +391,4 @@ grant execute on function public.respond_friend_request(uuid, boolean) to authen
 grant execute on function public.remove_friend(uuid) to authenticated;
 grant execute on function public.list_friends() to authenticated;
 grant execute on function public.restore_account() to authenticated;
-do $$
-begin
-  if exists (select 1 from pg_roles where rolname = 'service_role') then
-    grant execute on function public.schedule_account_deletion(uuid) to service_role;
-    grant execute on function public.accounts_due_for_deletion(integer) to service_role;
-  end if;
-end;
-$$;
-
 commit;
