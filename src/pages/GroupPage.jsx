@@ -178,7 +178,7 @@ export default function GroupPage({ groupId }) {
       totalCents,
       currencyCode,
     };
-    if (await actions.saveSnapshot(groupId, snapshot)) notify.success('Split saved. Find it under History.');
+    if (await actions.saveSnapshot(groupId, snapshot)) notify.success('Split saved. Find it under Recent Activities.');
   };
 
   const exportCsv = () => {

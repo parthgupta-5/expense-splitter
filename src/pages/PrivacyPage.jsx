@@ -28,7 +28,7 @@ const sections = [
       <>
         <h3>Without an account</h3>
         <p>
-          Groups, the names of people in them, expenses, payments, saved splits, your saved people and your settings
+          Groups, the names of people in them, expenses, payments, saved splits, names you reuse and your settings
           are kept only in this browser&apos;s storage on your device.
         </p>
         <h3>Your account</h3>
@@ -41,8 +41,12 @@ const sections = [
           </li>
           <li>
             <strong>Profile:</strong> your display name, your @username, your profile photo if you upload one, your
-            default currency, small preferences (for example, that you closed the welcome panel) and your list of saved
-            people.
+            default currency, small preferences (for example, that you closed the welcome panel) and names you reuse
+            in groups.
+          </li>
+          <li>
+            <strong>Friends:</strong> which accounts you sent a friend request to or received one from, whether it is
+            pending, accepted or declined, and when.
           </li>
         </ul>
         <h3>Groups you are part of</h3>
@@ -101,6 +105,10 @@ const sections = [
         <li>
           <strong>Members of a group</strong> see its people, expenses, payments, saved splits and activity history,
           and each member&apos;s display name, @username and profile photo.
+        </li>
+        <li>
+          <strong>Your friends</strong>, and anyone you send a friend request to or receive one from, see your display
+          name, @username and profile photo. Nobody sees your email address.
         </li>
         <li>
           <strong>Someone you invite</strong> sees only the group&apos;s name, the name they would join as, and your
@@ -179,14 +187,28 @@ const sections = [
           minutes ago, you will be asked to sign in again first.
         </p>
         <p>
+          <strong>You have 7 days to change your mind.</strong> Your account is switched off straight away and deleted
+          for good 7 days later. Sign in during those 7 days and you can restore it, with everything as it was (except
+          the invitations and friend requests that were withdrawn).
+        </p>
+        <p>
           <strong>When deletion is blocked:</strong> if you own a group that other members use, delete that group first
           (Group settings → Delete group). Deleting it removes it for every member. Handing a group over to someone else
           is not available yet.
         </p>
-        <h3>Deleted straight away</h3>
+        <h3>Straight away</h3>
+        <ul>
+          <li>You are signed out on every device.</li>
+          <li>Nobody can find you by @username, invite you to a group or send you a friend request.</li>
+          <li>
+            Pending invitations to you, invitations sent from groups you own, and pending friend requests to or from you
+            are withdrawn.
+          </li>
+        </ul>
+        <h3>Deleted after 7 days</h3>
         <ul>
           <li>Your sign-in account (email address, password, Google link) and your sessions.</li>
-          <li>Your profile: display name, @username, photo, preferences and saved people. Your photo files are removed.</li>
+          <li>Your profile: display name, @username, photo, preferences and friends. Your photo files are removed.</li>
           <li>Groups you own that nobody else uses, with all their expenses, payments, saved splits, invitations and history.</li>
           <li>Your memberships in other people&apos;s groups, and invitations sent to you.</li>
           <li>Your username hold, rate-limit counters and notification timestamp.</li>
@@ -201,7 +223,7 @@ const sections = [
         </ul>
         <h3>Afterwards</h3>
         <ul>
-          <li>Your @username becomes available for someone else to choose.</li>
+          <li>Once your account is deleted, your @username becomes available for someone else to choose.</li>
           <li>
             The app makes no separate backups of its own. Supabase and Vercel may keep backups or logs for a limited
             time under their own policies; we cannot give a specific period.

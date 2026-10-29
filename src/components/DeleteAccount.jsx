@@ -82,13 +82,16 @@ function DeleteAccountDialog({ open, onClose }) {
     setBusy(true);
     setProblem('');
     try {
-      await repo.deleteAccount(normalizeUsername(confirmation));
+      const result = await repo.deleteAccount(normalizeUsername(confirmation));
       const id = user.id;
       await auth.forgetSession();
       forgetAccountOnDevice(id);
       onClose();
       navigate('/', { replace: true });
-      notify.success('Your account was deleted.');
+      const when = result.deletes_on
+        ? 'on ' + new Date(result.deletes_on).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })
+        : 'in 7 days';
+      notify.success(`Your account will be deleted ${when}. Sign in before then to restore it.`, 8);
     } catch (error) {
       if (error.code === 'reauth_required') setStep('reauth');
       else if (error.code === 'owns_shared_groups') setBlockers(error.groups || []);
@@ -130,12 +133,19 @@ function DeleteAccountDialog({ open, onClose }) {
   return (
     <Modal title="Delete your account?" open={open} onCancel={busy ? undefined : onClose} footer={null} destroyOnHidden>
       <div className="delete-account-dialog">
-        <Paragraph strong>This cannot be undone.</Paragraph>
-        <Text strong>Deleted straight away</Text>
+        <Paragraph strong>
+          You have 7 days to change your mind. Sign in during that time and you can restore your account.
+        </Paragraph>
+        <Text strong>Switched off straight away</Text>
         <ul className="delete-account-list">
-          <li>Your sign-in (email address, password, Google link), profile, @username, photo and saved people.</li>
+          <li>You are signed out everywhere, and nobody can find you, invite you or send you friend requests.</li>
+          <li>Invitations and friend requests waiting on you, or sent from your groups, are withdrawn.</li>
+        </ul>
+        <Text strong>Deleted for good after 7 days</Text>
+        <ul className="delete-account-list">
+          <li>Your sign-in (email address, password, Google link), profile, @username, photo and friends.</li>
           <li>Groups you own that nobody else uses, with everything in them.</li>
-          <li>Your memberships in other people&apos;s groups, and invitations sent to you.</li>
+          <li>Your memberships in other people&apos;s groups.</li>
         </ul>
         <Text strong>Kept in other people&apos;s groups</Text>
         <ul className="delete-account-list">
@@ -145,7 +155,7 @@ function DeleteAccountDialog({ open, onClose }) {
           </li>
         </ul>
         <Paragraph type="secondary">
-          Your @username becomes available to others. More detail: <Link to="/privacy#deletion" onClick={onClose}>Privacy Policy</Link>.
+          After that your @username becomes available to others. More detail: <Link to="/privacy#deletion" onClick={onClose}>Privacy Policy</Link>.
         </Paragraph>
 
         {blockers === null && <Text type="secondary" role="status">Checking your groups…</Text>}
@@ -218,7 +228,7 @@ export default function DeleteAccount() {
     <SettingsSection id="delete-account" title="Delete account" className="danger-card">
       <SettingRow
         label="Delete your account"
-        help="Permanently delete your account and personal data. Shared groups may need to be resolved first."
+        help="Switches your account off now and deletes it after 7 days, unless you sign in and restore it. Shared groups may need to be resolved first."
       >
         <Button danger icon={<DeleteOutlined />} onClick={() => setOpen(true)}>Delete account…</Button>
       </SettingRow>

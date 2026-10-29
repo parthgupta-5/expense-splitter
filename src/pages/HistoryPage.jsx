@@ -101,7 +101,7 @@ export default function HistoryPage() {
 
   return (
     <>
-      <PageIntro title="Activity history" />
+      <PageIntro title="Recent activities" />
       <section className="page-panel">
         {!cloud && supabaseConfigured && (
           <Alert

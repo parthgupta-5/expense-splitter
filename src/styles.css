@@ -428,3 +428,17 @@ body{background:var(--page)}
   .money-row{grid-template-columns:minmax(0,1fr) auto}
   .money-row-main{grid-row:span 2}
 }
+/* Friends page and the requests-only bell */
+.friend-request-form{row-gap:8px;margin-bottom:6px}
+.friend-request-form .ant-input-affix-wrapper{width:min(260px,100%)}
+.friends-help{margin:6px 0 18px;font-size:13px}
+.friends-page h4.ant-typography{margin:22px 0 6px}
+.friends-list{max-width:850px;border-top:1px solid var(--line)}
+.friends-list .ant-list-item{align-items:center;gap:12px;padding:13px 4px}
+.friends-list .ant-list-item-meta{align-items:center}
+.friends-list .ant-list-item-action{display:flex;align-items:center;margin-inline-start:12px}
+.bell-footer{margin:18px 0 0;font-size:13px}
+.restore-account .ant-result-extra{display:flex;flex-wrap:wrap;justify-content:center;gap:10px}
+.restore-account .restore-problem{flex-basis:100%}
+@media(max-width:600px){.friends-list .ant-list-item{flex-wrap:wrap}.friend-request-form .ant-form-item{width:100%}}
+.main-nav .nav-link{white-space:nowrap}

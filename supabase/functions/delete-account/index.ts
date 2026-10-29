@@ -1,4 +1,5 @@
-// Supabase Edge Function: deletes the calling user's account. Deploy by hand (see README, "Account deletion").
+// Supabase Edge Function: schedules the calling user's account for deletion (disabled now, deleted after 7 days by
+// purge-deleted-accounts). Deploy by hand (see README, "Account deletion").
 // SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided to every Edge Function by Supabase; the
 // admin key never leaves the server. ALLOWED_ORIGINS (optional) is a comma-separated list of app origins for CORS.
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0';

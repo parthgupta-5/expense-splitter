@@ -14,10 +14,12 @@ import { readLastGroup } from '../lib/storage';
 
 const { Header } = Layout;
 
-export default function TopBar() {
-  const { workspace, auth, dark, toggleDark } = useApp();
+export default function TopBar({ disabled = false }) {
+  const {
+    workspace, auth, dark, toggleDark, friends,
+  } = useApp();
   const { pathname } = useLocation();
-  const { groups, savedPeople, profile } = workspace;
+  const { groups, profile } = workspace;
   const lastGroup = groups.find((group) => group.id === readLastGroup()) || groups[0];
 
   const navItems = [
@@ -28,8 +30,14 @@ export default function TopBar() {
       active: /^\/groups\/[^/]+/.test(pathname),
     },
     { to: '/groups', label: 'Groups', icon: <AppstoreOutlined />, count: groups.length, active: pathname === '/groups' },
-    { to: '/history', label: 'History', icon: <HistoryOutlined />, active: pathname === '/history' },
-    { to: '/people', label: 'People', icon: <TeamOutlined />, count: savedPeople.length, active: pathname === '/people' },
+    { to: '/activity', label: 'Recent Activities', icon: <HistoryOutlined />, active: pathname === '/activity' },
+    {
+      to: '/friends',
+      label: 'Friends',
+      icon: <TeamOutlined />,
+      count: friends.enabled ? friends.friends.length : undefined,
+      active: pathname === '/friends',
+    },
     { to: '/settings', label: 'Settings', icon: <SettingOutlined />, active: pathname === '/settings' },
   ];
 
@@ -40,20 +48,22 @@ export default function TopBar() {
           <span className="brand-mark"><WalletOutlined /></span>
           <span>Expense <span className="brand-accent">Splitter</span></span>
         </Link>
-        <nav className="main-nav" aria-label="Main navigation">
-          {navItems.map((item) => (
-            <Link
-              key={item.label}
-              to={item.to}
-              className={'nav-link' + (item.active ? ' is-active' : '')}
-              aria-current={item.active ? 'page' : undefined}
-            >
-              {item.icon}
-              <span>{item.label}</span>
-              {item.count !== undefined && <span className="nav-count">{item.count}</span>}
-            </Link>
-          ))}
-        </nav>
+        {!disabled && (
+          <nav className="main-nav" aria-label="Main navigation">
+            {navItems.map((item) => (
+              <Link
+                key={item.label}
+                to={item.to}
+                className={'nav-link' + (item.active ? ' is-active' : '')}
+                aria-current={item.active ? 'page' : undefined}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+                {item.count !== undefined && <span className="nav-count">{item.count}</span>}
+              </Link>
+            ))}
+          </nav>
+        )}
         <Space size={8}>
           <Tooltip title={dark ? 'Switch to light appearance' : 'Switch to dark appearance'}>
             <Button
@@ -64,7 +74,7 @@ export default function TopBar() {
               aria-label="Toggle appearance"
             />
           </Tooltip>
-          {auth.user && workspace.mode === 'cloud' && <ActivityBell />}
+          {auth.user && workspace.mode === 'cloud' && !disabled && <ActivityBell />}
           {/* Signed in, account management lives in Settings. */}
           <Link
             to={auth.user ? '/settings#account' : '/profile'}

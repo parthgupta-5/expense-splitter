@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 // Guest mode (no Supabase): the activity bell is for signed-in users only, so guests never see it, and their own
-// history stays on the History page, read from this device.
+// history stays on the Recent activities page, read from this device.
 
 test.beforeEach(async ({ page }) => {
   await page.route(/fonts\.(googleapis|gstatic)\.com/, (route) => route.fulfill({ status: 200, body: '' }));
@@ -24,7 +24,7 @@ test('guests see no activity bell, and the top bar still fits the screen', async
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 
-  await page.goto('/history');
-  await expect(page.getByRole('heading', { level: 1, name: 'Activity history' })).toBeVisible();
+  await page.goto('/activity');
+  await expect(page.getByRole('heading', { level: 1, name: 'Recent activities' })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Notifications/ })).toHaveCount(0);
 });

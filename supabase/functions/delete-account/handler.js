@@ -8,15 +8,14 @@
 //    cannot delete the account.
 // 3. The caller must type their own @username.
 // 4. Groups other members use block the deletion (the database trigger refuses too, atomically).
-// 5. Profile photos are removed with the caller's own token, so Storage policies limit this to their own folder.
-//    Supabase refuses to delete a user who still owns Storage objects, so this has to come first.
-// 6. Only then is the admin key used, for exactly one call: deleting this user. The database trigger
-//    prepare_account_deletion() and the foreign keys remove or unlink everything else in the same transaction.
-// Success is reported only after step 6 succeeds.
+// 5. Only then is the admin key used: schedule_account_deletion() disables the account at once (it can no longer be
+//    found, invited or befriended, and what waited on it is withdrawn), and every session is signed out.
+// 6. Nothing is deleted yet. The account can be restored for 7 days by signing in. After that the
+//    purge-deleted-accounts function removes its photos and deletes the user, and the database trigger
+//    prepare_account_deletion() removes or unlinks everything else in the same transaction.
+// Success is reported only after step 5 succeeds.
 
 export const REAUTH_SECONDS = 15 * 60;
-const AVATAR_BUCKET = 'avatars';
-const MAX_AVATAR_PAGES = 20;
 
 const normalizeUsername = (value) => String(value ?? '').trim().replace(/^@/, '').toLowerCase();
 
@@ -99,23 +98,19 @@ export function createDeleteAccountHandler({
       });
     }
 
-    // Photos: clear the profile link, then delete every object in the caller's own folder.
-    const { error: unlinkError } = await asUser.from('profiles').update({ avatar_url: null }).eq('id', user.id);
-    if (unlinkError) return refuse(500, 'photo_cleanup_failed', 'Your profile photo could not be removed. Nothing was deleted.');
-    const bucket = asUser.storage.from(AVATAR_BUCKET);
-    for (let page = 0; page < MAX_AVATAR_PAGES; page += 1) {
-      const { data: files, error: listError } = await bucket.list(user.id, { limit: 100 });
-      if (listError) return refuse(500, 'photo_cleanup_failed', 'Your profile photos could not be removed. Your account was not deleted.');
-      if (!files?.length) break;
-      const { error: removeError } = await bucket.remove(files.map((file) => `${user.id}/${file.name}`));
-      if (removeError) return refuse(500, 'photo_cleanup_failed', 'Your profile photos could not be removed. Your account was not deleted.');
+    // Disable the account now; purge-deleted-accounts removes it (and its photos) once the 7 days are over.
+    const { data: scheduled, error: scheduleError } = await admin.rpc('schedule_account_deletion', { target_user: user.id });
+    if (scheduleError || !scheduled || scheduled.error === 'not_found') {
+      return refuse(500, 'delete_failed', 'Your account could not be scheduled for deletion. Nothing was changed. Please try again.');
     }
-
-    const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
-    if (deleteError) {
-      return refuse(500, 'delete_failed',
-        'Your account could not be deleted. Your profile photo was removed; everything else is unchanged. Please try again.');
+    if (scheduled.error === 'owns_shared_groups') {
+      return refuse(409, 'owns_shared_groups', 'You own groups that other members use. Delete those groups first.', {
+        groups: String(scheduled.groups || '').split(', ').filter(Boolean),
+      });
     }
-    return reply(200, { deleted: true });
+    // Sign the account out everywhere, so it stops working on other devices straight away. Not fatal: the app also
+    // locks itself while the account waits to be deleted.
+    try { await admin.auth.admin.signOut(token, 'global'); } catch { /* the sessions still end when they expire */ }
+    return reply(200, { scheduled: true, deletes_on: scheduled.deletes_on });
   };
 }

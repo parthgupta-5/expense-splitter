@@ -14,7 +14,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router';
 import App from './App';
 import { AppProvider } from './state/AppContext';
-import { findHeading, preloadLazyModules } from './test/app';
+import { findButton, findHeading, preloadLazyModules } from './test/app';
 import * as repo from './data/cloudRepo';
 
 const mocks = vi.hoisted(() => ({ auth: {} }));
@@ -24,6 +24,7 @@ vi.mock('./supabase', () => ({
 }));
 vi.mock('./state/useAuth', () => ({ useAuth: () => mocks.auth }));
 vi.mock('./data/cloudRepo', () => ({
+  listFriends: vi.fn(() => Promise.resolve([])),
   fetchGroups: vi.fn(),
   fetchGroup: vi.fn(),
   fetchProfile: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock('./data/cloudRepo', () => ({
   listGroupPeople: vi.fn(),
   accountDeletionBlockers: vi.fn(),
   deleteAccount: vi.fn(),
+  restoreAccount: vi.fn(),
 }));
 
 const ME = 'user-1';
@@ -43,7 +45,9 @@ const flat = {
   id: 'g-flat', name: 'Flat', currencyCode: 'INR', people: ['Asha', 'Ben'], personRecords: [], expenses: [], payments: [],
   savedSplits: [], ownerId: ME, role: 'owner', memberCount: 2, cloud: true,
 };
-const signIn = ({ providers = ['email'] } = {}) => {
+const SCHEDULED = { scheduled: true, deletes_on: '2026-11-08T12:00:00.000Z' };
+const scheduledMessage = /^Your account will be deleted on .*2026\. Sign in before then to restore it\.$/;
+const signIn = ({ providers = ['email'], profile = {} } = {}) => {
   mocks.auth = {
     user: {
       id: ME, email: 'asha@example.com', user_metadata: {}, app_metadata: { providers }, email_confirmed_at: '2026-10-01',
@@ -59,6 +63,7 @@ const signIn = ({ providers = ['email'] } = {}) => {
   repo.fetchGroups.mockResolvedValue([flat]);
   repo.fetchProfile.mockResolvedValue({
     id: ME, display_name: 'Asha', username: 'asha_rao', username_confirmed_at: '2026-10-01', saved_people: [], preferences: {},
+    ...profile,
   });
 };
 
@@ -116,10 +121,12 @@ describe('delete account: where and what', () => {
     signIn();
     renderAt('/settings');
     const dialog = await openDialog(user);
-    expect(dialog.textContent).toMatch(/This cannot be undone\./);
+    expect(dialog.textContent).toMatch(/You have 7 days to change your mind\./);
+    expect(dialog.textContent).toMatch(/Switched off straight away/);
+    expect(dialog.textContent).toMatch(/Deleted for good after 7 days/);
     expect(dialog.textContent).toMatch(/Groups you own that nobody else uses/);
     expect(dialog.textContent).toMatch(/history shows "Former member"/);
-    expect(dialog.textContent).toMatch(/Your @username becomes available to others/);
+    expect(dialog.textContent).toMatch(/After that your @username becomes available to others/);
     expect(repo.accountDeletionBlockers).toHaveBeenCalledTimes(1);
     expect(repo.deleteAccount).not.toHaveBeenCalled();
 
@@ -176,9 +183,9 @@ describe('delete account: confirming', () => {
     expect(deleteButton(dialog).disabled).toBe(false);
     await user.click(deleteButton(dialog));
     await waitFor(() => expect(repo.deleteAccount).toHaveBeenCalledWith('asha_rao'));
-    expect(screen.queryByText('Your account was deleted.')).toBeNull(); // not before the server confirms
-    finish({ deleted: true });
-    expect(await screen.findByText('Your account was deleted.')).toBeTruthy();
+    expect(screen.queryByText(scheduledMessage)).toBeNull(); // not before the server confirms
+    finish(SCHEDULED);
+    expect(await screen.findByText(scheduledMessage)).toBeTruthy();
     expect(mocks.auth.forgetSession).toHaveBeenCalledTimes(1);
     expect(JSON.parse(store.get('expenseSplitterActivitySeenV1'))).toEqual({ other: 9 });
     await waitFor(() => expect(screen.getByTestId('location').textContent).not.toBe('/settings'));
@@ -189,7 +196,7 @@ describe('delete account: confirming', () => {
     signIn();
     repo.deleteAccount
       .mockRejectedValueOnce(failure('reauth_required', 'For your safety, confirm it is you by signing in again, then retry.'))
-      .mockResolvedValueOnce({ deleted: true });
+      .mockResolvedValueOnce(SCHEDULED);
     renderAt('/settings');
     const dialog = await openDialog(user);
     await user.type(await waitFor(() => confirmField(dialog)), 'asha_rao');
@@ -201,7 +208,7 @@ describe('delete account: confirming', () => {
     await waitFor(() => expect(mocks.auth.signIn).toHaveBeenCalledWith({ email: 'asha@example.com', password: 'Correct-Horse-9' }));
     await waitFor(() => expect(repo.deleteAccount).toHaveBeenCalledTimes(2));
     expect(repo.deleteAccount).toHaveBeenLastCalledWith('asha_rao');
-    expect(await screen.findByText('Your account was deleted.')).toBeTruthy();
+    expect(await screen.findByText(scheduledMessage)).toBeTruthy();
   });
 
   it('sends Google-only accounts through Google again, coming back to this section', async () => {
@@ -222,14 +229,53 @@ describe('delete account: confirming', () => {
     const user = userEvent.setup();
     signIn();
     repo.deleteAccount.mockRejectedValue(failure('delete_failed',
-      'Your account could not be deleted. Your profile photo was removed; everything else is unchanged. Please try again.'));
+      'Your account could not be scheduled for deletion. Nothing was changed. Please try again.'));
     renderAt('/settings');
     const dialog = await openDialog(user);
     await user.type(await waitFor(() => confirmField(dialog)), 'asha_rao');
     await user.click(deleteButton(dialog));
-    expect((await within(dialog).findByRole('alert')).textContent).toMatch(/could not be deleted/);
-    expect(screen.queryByText('Your account was deleted.')).toBeNull();
+    expect((await within(dialog).findByRole('alert')).textContent).toMatch(/could not be scheduled for deletion/);
+    expect(screen.queryByText(scheduledMessage)).toBeNull();
     expect(mocks.auth.forgetSession).not.toHaveBeenCalled();
     expect(screen.getByTestId('location').textContent).toBe('/settings');
+  });
+});
+
+describe('restoring an account within 7 days', () => {
+  const waiting = { deletion_requested_at: '2026-11-01T12:00:00.000Z' };
+
+  it('shows only the restore screen while the account waits to be deleted', async () => {
+    signIn({ profile: waiting });
+    renderAt('/groups');
+    expect(await screen.findByText('Your account is scheduled for deletion')).toBeTruthy();
+    expect(screen.getByText(/2026/, { selector: 'strong' })).toBeTruthy();
+    expect(document.querySelector('.main-nav')).toBeNull();
+    expect(document.querySelector('.activity-bell')).toBeNull();
+    expect(screen.queryByText('Your groups')).toBeNull();
+    expect(repo.listMyInvitations).not.toHaveBeenCalled();
+    expect(repo.listFriends).not.toHaveBeenCalled();
+  });
+
+  it('restores the account and opens the app again', async () => {
+    const user = userEvent.setup();
+    signIn({ profile: waiting });
+    repo.restoreAccount.mockResolvedValue({ restored: true });
+    renderAt('/groups');
+    await user.click(await findButton('Restore my account'));
+    await waitFor(() => expect(repo.restoreAccount).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText('Welcome back. Your account is restored.')).toBeTruthy();
+    expect(await findHeading('Your groups', 1)).toBeTruthy();
+    expect(document.querySelector('.main-nav')).toBeTruthy();
+  });
+
+  it('says so when the 7 days are over, and offers to sign out', async () => {
+    const user = userEvent.setup();
+    signIn({ profile: waiting });
+    repo.restoreAccount.mockRejectedValue(new Error('The 7 days to restore this account have passed. It is being deleted.'));
+    renderAt('/groups');
+    await user.click(await findButton('Restore my account'));
+    expect(await screen.findByText(/have passed/)).toBeTruthy();
+    await user.click(await findButton('Sign out'));
+    expect(mocks.auth.signOut).toHaveBeenCalledTimes(1);
   });
 });

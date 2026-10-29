@@ -25,9 +25,10 @@ const { AccountDeletionError, deleteAccount, subscribeToChanges } = await import
 beforeEach(() => { fake.invoke.mockReset(); fake.bindings = []; fake.removed = []; });
 
 describe('deleteAccount', () => {
-  it('resolves only when the function says the account was deleted', async () => {
-    fake.invoke.mockResolvedValue({ data: { deleted: true }, error: null });
-    await expect(deleteAccount('asha_rao')).resolves.toEqual({ deleted: true });
+  it('resolves only when the function says the account was scheduled for deletion', async () => {
+    const scheduled = { scheduled: true, deletes_on: '2026-11-08T12:00:00.000Z' };
+    fake.invoke.mockResolvedValue({ data: scheduled, error: null });
+    await expect(deleteAccount('asha_rao')).resolves.toEqual(scheduled);
     expect(fake.invoke).toHaveBeenCalledWith('delete-account', { body: { confirm: 'asha_rao' } });
   });
 
@@ -42,7 +43,7 @@ describe('deleteAccount', () => {
   });
 
   it('never treats an unexpected answer as success, and explains a network failure', async () => {
-    fake.invoke.mockResolvedValue({ data: { ok: true }, error: null });
+    fake.invoke.mockResolvedValue({ data: { deleted: true }, error: null }); // an older function's answer is not trusted
     await expect(deleteAccount('x')).rejects.toMatchObject({ code: 'unknown', message: expect.stringMatching(/could not be deleted/) });
     fake.invoke.mockResolvedValue({ data: null, error: { message: 'Failed to send a request to the Edge Function' } });
     await expect(deleteAccount('x')).rejects.toMatchObject({ code: 'network', message: expect.stringMatching(/Nothing was deleted/) });
