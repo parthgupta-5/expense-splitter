@@ -1,7 +1,7 @@
 # Expense Splitter
 
-Split shared costs with friends, flatmates or travel groups, share the group so everyone adds their own expenses, and
-settle up with a plan of at most N−1 payments for N people.
+Split shared costs with friends, flatmates or travel groups, share the group so everyone adds their own expenses, 
+and  settle up with a plan of at most N−1 payments for N people.
 
 > **End-term project submission**
 >
@@ -460,28 +460,6 @@ Use two browsers with two accounts.
 
 ---
 
-## Known limitations
-
-- **Adding by username needs an existing account.** There are no invitation emails: a friend signs up first, or is
-  added as a guest meanwhile.
-- **No ownership transfer.** An owner whose group other members use must delete that group before deleting their
-  account.
-- **People are referenced by name in expenses.** Deleting an old expense or payment that names a removed person can
-  leave that person with a balance until they are added back.
-- **Same-expense edits are last-writer-wins.** If two members edit the *same* expense at the same moment, the later
-  save wins. Different expenses never conflict.
-- **A switched-off account is locked by the app, not by every database rule.** It cannot be found, invited or
-  befriended (enforced by the database), and the app shows only the restore screen. Its group memberships stay until
-  the final deletion so a restore can bring them back, which means its owner could still reach those groups by calling
-  the API directly during the 7 days.
-- **Signed-in changes need a connection.** Offline writes are refused with a message rather than queued.
-- **No currency conversion.** Each group has one currency.
-- **Guest data lives only in the browser** until it is moved into an account or backed up.
-- **No notifications outside the app** (no push or email notifications).
-- Free-tier Supabase projects pause after a period of inactivity.
-
----
-
 ## Project history
 
 - **v1:** React app with guest mode and per-user cloud sync of whole groups as JSON; tests for the money logic; CI.
@@ -498,10 +476,10 @@ Use two browsers with two accounts.
 
 ## AI usage
 
-AI tools (Claude) were used for reviewing the product, debugging, refactoring, writing tests and documentation. Every
-change was reviewed by the author, who is responsible for the final product and its design decisions.
+AI tools (Claude) were used for reviewing the product, debugging, refactoring, writing tests and documentation. 
+Every change was reviewed by the author, who is responsible for the final product and its design decisions.
 
 ## Originality
 
-An original project built with open-source libraries (React, React Router, Ant Design, the Supabase client, Vite). No
-existing application or tutorial project was forked.
+An original project built with open-source libraries (React, React Router, Ant Design, the Supabase client, Vite). 
+No existing application or tutorial project was forked.
